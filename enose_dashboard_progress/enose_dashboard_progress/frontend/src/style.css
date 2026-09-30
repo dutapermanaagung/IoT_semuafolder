@@ -1,0 +1,183 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f6f8;
+  color: #17202a;
+}
+
+main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 28px;
+}
+
+h1 {
+  margin-bottom: 4px;
+  color: #2c3e50;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin: 24px 0;
+}
+
+.toolbar select, .toolbar button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #bdc3c7;
+  background: white;
+  font-weight: 600;
+}
+
+.toolbar button {
+  background: #d35400;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.export-pdf {
+  background: #d35400 !important;
+}
+
+.export-pdf:hover {
+  background: #ba4a00 !important;
+}
+
+.export-csv {
+  background: #27ae60 !important;
+}
+
+.export-csv:hover {
+  background: #219150 !important;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-left: 5px solid #d35400; /* Aksen warna di sisi kiri kartu */
+}
+
+.card small {
+  display: block;
+  color: #7f8c8d;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.card strong {
+  display: block;
+  font-size: 24px;
+  margin-top: 8px;
+  color: #2c3e50;
+}
+
+.panel {
+  background: white;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-top: 18px;
+}
+
+.panel h2 {
+  color: #2c3e50;
+  font-size: 18px;
+  margin-top: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+/* Membuat Header Tabel Berwarna seperti contoh dashboard */
+th {
+  background: #d35400; 
+  color: white;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+}
+
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f2f6;
+  text-align: left;
+}
+
+tr:nth-child(even) {
+  background-color: #fafbfc; /* Efek baris selang-seling berwarna tipis */
+}
+
+@media(max-width: 800px) {
+  .cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  main {
+    padding: 15px;
+  }
+  .panel {
+    overflow: auto;
+  }
+}
+
+/* Header Layout dengan Status Koneksi */
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  background: #eaecee;
+  color: #2c3e50;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background-color: #27ae60;
+  box-shadow: 0 0 8px rgba(39, 174, 96, 0.6);
+}
+
+.status-dot.offline {
+  background-color: #c0392b;
+  box-shadow: 0 0 8px rgba(192, 57, 43, 0.6);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-icon {
+  font-size: 20px;
+}
