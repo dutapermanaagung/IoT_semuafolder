@@ -1,7 +1,7 @@
 # ======================
 # Stage 1: Builder
 # ======================
-FROM rust:1.85-slim AS builder
+FROM rust:latest AS builder
 
 # Install dependency yang dibutuhkan untuk compile
 RUN apt-get update && apt-get install -y \
