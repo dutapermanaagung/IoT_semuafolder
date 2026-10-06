@@ -5,7 +5,9 @@ import jsPDF from "jspdf";
 import "./style.css";
 import * as XLSX from "xlsx-js-style";
 
-const API = "http://127.0.0.1:8080";
+const API_PORT = import.meta.env.VITE_BACKEND_PORT || "8081";
+const API = import.meta.env.VITE_API_URL || `http://127.0.0.1:${API_PORT}`;
+const WS_URL = import.meta.env.VITE_WS_URL || `ws://127.0.0.1:${API_PORT}/ws`;
 
 function App() {
   const [type, setType] = useState("robusta");
@@ -56,7 +58,7 @@ function App() {
   }, [type]);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://127.0.0.1:8080/ws");
+    const ws = new WebSocket(WS_URL);
     ws.onmessage = e => {
       const item = JSON.parse(e.data);
       const incomingType = item.coffee_type || item.data?.coffee_type;
@@ -442,13 +444,16 @@ function App() {
   );
 }
 
-  const chart = data.map((x,i)=>({
-    n: i + 1, 
-    MQ2: x.data?.mq2 ?? x.sensors?.mq2 ?? 0, 
-    MQ3: x.data?.mq3 ?? x.sensors?.mq3 ?? 0, 
-    MQ135: x.data?.mq135 ?? x.sensors?.mq135 ?? 0, 
-    MQ138: x.data?.mq138 ?? x.sensors?.mq138 ?? 0
-  }));
+  const chart = data.map((x,i)=>{
+    const s = x.data?.sensors ?? x.sensors ?? x.data ?? {};
+    return {
+      n: i + 1, 
+      MQ2: s.mq2 ?? 0, 
+      MQ3: s.mq3 ?? 0, 
+      MQ135: s.mq135 ?? 0, 
+      MQ138: s.mq138 ?? 0
+    };
+  });
 
   return <main>
     <div className="header-container">
@@ -529,7 +534,7 @@ function App() {
         </thead>
         <tbody>
           {data.slice().reverse().map(x => {
-            const sensorData = x.data ?? x.sensors ?? {};
+            const sensorData = x.data?.sensors ?? x.sensors ?? x.data ?? {};
             return (
               <tr key={x.id ?? Math.random()}>
                 <td>{new Date(x.timestamp).toLocaleString()}</td>

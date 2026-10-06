@@ -28,22 +28,28 @@ impl CosmosRepo {
     }
 
     pub async fn insert(&self, item: &Sampling) -> anyhow::Result<()> {
+        let pk = item
+            .device_id
+            .clone()
+            .or_else(|| item.data.device_id.clone())
+            .unwrap_or_else(|| "esp32s3-device-01".to_string());
+
         self.container
-            .create_item(&item.data.coffee_type, &item.id, item, None)
+            .create_item(pk, &item.id, item.clone(), None)
             .await?;
         Ok(())
     }
 
     pub async fn list_by_type(&self, coffee_type: &str) -> anyhow::Result<Vec<Sampling>> {
+        let lower = coffee_type.to_lowercase();
         let query = format!(
-            "SELECT * FROM c WHERE c.data.coffee_type = '{}' ORDER BY c.timestamp DESC",
-            coffee_type
+            "SELECT * FROM c WHERE (c.data.coffee_type = '{lower}' OR LOWER(c.data.coffee_type) = '{lower}') ORDER BY c.timestamp DESC"
         );
         
         let mut pager = self.container
             .query_items::<Sampling>(
                 &query,
-                FeedScope::partition(coffee_type.to_string()),
+                FeedScope::full_container(),
                 None,
             )
             .await?;
