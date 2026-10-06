@@ -1,9 +1,9 @@
 # ======================
 # Stage 1: Builder
 # ======================
-FROM rust:1.80-slim AS builder
+FROM rust:1.85-slim AS builder
 
-# Install dependency yang dibutuhkan untuk compile (sangat penting!)
+# Install dependency yang dibutuhkan untuk compile
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
