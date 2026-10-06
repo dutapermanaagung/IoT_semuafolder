@@ -31,10 +31,12 @@ struct SamplingQuery {
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
-    let endpoint = env::var("COSMOS_ENDPOINT")?;
-    let key = env::var("COSMOS_KEY")?;
-    let database = env::var("COSMOS_DATABASE").unwrap_or_else(|_| "enose_coffee".into());
-    let container = env::var("COSMOS_CONTAINER").unwrap_or_else(|_| "sampling".into());
+    let endpoint = env::var("COSMOS_ENDPOINT")
+        .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_ENDPOINT tidak ditemukan. Silakan buat file .env di folder backend berdasarkan .env.example"))?;
+    let key = env::var("COSMOS_KEY")
+        .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_KEY tidak ditemukan. Silakan tambahkan COSMOS_KEY ke file .env"))?;
+    let database = env::var("COSMOS_DATABASE").unwrap_or_else(|_| "IoTDatabase".into());
+    let container = env::var("COSMOS_CONTAINER").unwrap_or_else(|_| "TelemetryData".into());
     let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let port: u16 = env::var("PORT").unwrap_or_else(|_| "8080".into()).parse()?;
     
@@ -69,7 +71,8 @@ async fn main() -> anyhow::Result<()> {
 async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok", 
-        "database": "Azure Cosmos DB",
+        "database": "Azure Cosmos DB (IoTDatabase)",
+        "container": "TelemetryData",
         "db": "Connected"
     }))
 }
@@ -78,16 +81,19 @@ async fn create_sampling(
     State(state): State<Arc<AppState>>,
     Json(input): Json<CreateSampling>,
 ) -> Result<Json<Sampling>, (axum::http::StatusCode, String)> {
-    let coffee_type = input.coffee_type.to_lowercase();
-    if coffee_type != "robusta" && coffee_type != "arabika" {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "coffee_type harus robusta atau arabika".into()));
+    let coffee_type = input.coffee_type.trim().to_lowercase();
+    if coffee_type.is_empty() {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "coffee_type tidak boleh kosong".into()));
     }
 
+    let dev_id = input.device_id.clone().unwrap_or_else(|| "esp32s3-device-01".into());
     let item = Sampling {
         id: Uuid::new_v4().to_string(),
+        device_id: Some(dev_id.clone()),
         timestamp: Utc::now(),
         data: SamplingPayload {
             coffee_type,
+            device_id: Some(dev_id),
             sensors: input.sensors,
         },
     };
