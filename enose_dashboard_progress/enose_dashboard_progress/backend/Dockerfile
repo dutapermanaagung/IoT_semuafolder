@@ -33,15 +33,21 @@ RUN touch src/main.rs && cargo build --release
 # ======================
 FROM debian:bookworm-slim
 
+# Install ca-certificates & libssl-dev/libssl3 untuk koneksi HTTPS Cosmos DB
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Gunakan nama binary yang benar sesuai Cargo.toml
+# Gunakan nama binary yang benar dari hasil build Cargo
 COPY --from=builder /app/target/release/enose-cosmos-backend /app/backend
+
+# Set environment variable bawaan agar Axum mendengar port Ingress
+ENV PORT=8080
+ENV HOST=0.0.0.0
 
 EXPOSE 8080
 
