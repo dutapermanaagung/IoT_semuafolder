@@ -1,7 +1,7 @@
 # ======================
 # Stage 1: Builder
 # ======================
-FROM rust:latest AS builder
+FROM rust:bookworm AS builder
 
 # Install dependency yang dibutuhkan untuk compile
 RUN apt-get update && apt-get install -y \
