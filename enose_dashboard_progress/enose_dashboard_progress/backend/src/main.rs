@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_KEY tidak ditemukan. Silakan tambahkan COSMOS_KEY ke file .env"))?;
     let database = env::var("COSMOS_DATABASE").unwrap_or_else(|_| "IoTDatabase".into());
     let container = env::var("COSMOS_CONTAINER").unwrap_or_else(|_| "TelemetryData".into());
-    let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
     let port: u16 = env::var("PORT").unwrap_or_else(|_| "8080".into()).parse()?;
     
     // Inisialisasi repository Cosmos DB
