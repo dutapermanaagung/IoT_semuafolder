@@ -6,7 +6,6 @@ import "./style.css";
 import * as XLSX from "xlsx-js-style";
 
 const CONTAINER_URL = "backend-db.bravedesert-90e1dd1a.indonesiacentral.azurecontainerapps.io";
-
 const API = import.meta.env.VITE_API_URL || `https://${CONTAINER_URL}`;
 const WS_URL = import.meta.env.VITE_WS_URL || `wss://${CONTAINER_URL}/ws`;
 
@@ -25,7 +24,6 @@ function App() {
       if (res.ok) {
         const json = await res.json();
         setBackendStatus("Online");
-        // Asumsi backend mengembalikan status database, misal json.db = "Connected"
         setDbStatus(json.db ?? "Connected");
         setIsOnline(true);
       } else {
@@ -204,246 +202,238 @@ function App() {
   }
 
   function exportCSV() {
-  const coffeeVariants = [
-    "arabika",
-    "robusta",
-    "liberika",
-    "excelsa",
-    "gayo"
-  ];
+    const coffeeVariants = [
+      "arabika",
+      "robusta",
+      "liberika",
+      "excelsa",
+      "gayo"
+    ];
 
-  let allMockSamples = [];
-  let sampleCounter = 1;
+    let allMockSamples = [];
+    let sampleCounter = 1;
 
-  coffeeVariants.forEach((variant) => {
-    for (let i = 1; i <= 8; i++) {
-      const randomFactor = (Math.sin(sampleCounter) + 1) / 2;
+    coffeeVariants.forEach((variant) => {
+      for (let i = 1; i <= 8; i++) {
+        const randomFactor = (Math.sin(sampleCounter) + 1) / 2;
 
-      let confScore = Number(
-        (78 + randomFactor * 21.5).toFixed(1)
-      );
-
-      if (i === 4 || i === 7) {
-        confScore = Number(
-          (82 + Math.random() * 7).toFixed(1)
+        let confScore = Number(
+          (78 + randomFactor * 21.5).toFixed(1)
         );
+
+        if (i === 4 || i === 7) {
+          confScore = Number(
+            (82 + Math.random() * 7).toFixed(1)
+          );
+        }
+
+        const isAccurate = confScore >= 90;
+
+        const sampleTime = new Date(
+          Date.now() - (40 - sampleCounter) * 60000
+        ).toLocaleTimeString("id-ID");
+
+        allMockSamples.push({
+          No: sampleCounter,
+          Time: sampleTime,
+          Classification: `${variant}_${i}`,
+          "Confidence Score": `${confScore}%`,
+          "Accuration Status": isAccurate
+            ? "Accurate"
+            : "Not Accurate"
+        });
+
+        sampleCounter++;
       }
+    });
 
-      const isAccurate = confScore >= 90;
+    const worksheet = XLSX.utils.json_to_sheet(allMockSamples);
+    const workbook = XLSX.utils.book_new();
 
-      const sampleTime = new Date(
-        Date.now() - (40 - sampleCounter) * 60000
-      ).toLocaleTimeString("id-ID");
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      "Validation Data"
+    );
 
-      allMockSamples.push({
-        No: sampleCounter,
-        Time: sampleTime,
-        Classification: `${variant}_${i}`,
-        "Confidence Score": `${confScore}%`,
-        "Accuration Status": isAccurate
-          ? "Accurate"
-          : "Not Accurate"
-      });
+    worksheet["!cols"] = [
+      { wch: 8 },
+      { wch: 15 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 22 }
+    ];
 
-      sampleCounter++;
-    }
-  });
+    worksheet["!rows"] = [
+      { hpt: 25 }
+    ];
 
-  const worksheet = XLSX.utils.json_to_sheet(allMockSamples);
-  const workbook = XLSX.utils.book_new();
+    const headerCells = [
+      "A1",
+      "B1",
+      "C1",
+      "D1",
+      "E1"
+    ];
 
-  XLSX.utils.book_append_sheet(
-    workbook,
-    worksheet,
-    "Validation Data"
-  );
-
-  // Lebar kolom
-  worksheet["!cols"] = [
-    { wch: 8 },
-    { wch: 15 },
-    { wch: 22 },
-    { wch: 20 },
-    { wch: 22 }
-  ];
-
-  // Tinggi baris header
-  worksheet["!rows"] = [
-    { hpt: 25 }
-  ];
-
-  // Styling header
-  const headerCells = [
-    "A1",
-    "B1",
-    "C1",
-    "D1",
-    "E1"
-  ];
-
-  headerCells.forEach((cell) => {
-    worksheet[cell].s = {
-      fill: {
-        fgColor: {
-          rgb: "D35400"
-        }
-      },
-      font: {
-        name: "Arial",
-        sz: 11,
-        bold: true,
-        color: {
-          rgb: "FFFFFF"
-        }
-      },
-      alignment: {
-        horizontal: "center",
-        vertical: "center"
-      },
-      border: {
-        top: {
-          style: "thin",
+    headerCells.forEach((cell) => {
+      worksheet[cell].s = {
+        fill: {
+          fgColor: {
+            rgb: "D35400"
+          }
+        },
+        font: {
+          name: "Arial",
+          sz: 11,
+          bold: true,
           color: {
             rgb: "FFFFFF"
           }
         },
-        bottom: {
-          style: "thin",
-          color: {
-            rgb: "FFFFFF"
-          }
+        alignment: {
+          horizontal: "center",
+          vertical: "center"
         },
-        left: {
-          style: "thin",
-          color: {
-            rgb: "FFFFFF"
-          }
-        },
-        right: {
-          style: "thin",
-          color: {
-            rgb: "FFFFFF"
-          }
-        }
-      }
-    };
-  });
-
-  // Border seluruh tabel
-  const range = XLSX.utils.decode_range(
-    worksheet["!ref"]
-  );
-
-  for (let row = range.s.r; row <= range.e.r; row++) {
-    for (let col = range.s.c; col <= range.e.c; col++) {
-
-      const cellAddress = XLSX.utils.encode_cell({
-        r: row,
-        c: col
-      });
-
-      if (!worksheet[cellAddress]) continue;
-
-      worksheet[cellAddress].s = {
-        ...(worksheet[cellAddress].s || {}),
-
         border: {
           top: {
             style: "thin",
             color: {
-              rgb: "BFBFBF"
+              rgb: "FFFFFF"
             }
           },
           bottom: {
             style: "thin",
             color: {
-              rgb: "BFBFBF"
+              rgb: "FFFFFF"
             }
           },
           left: {
             style: "thin",
             color: {
-              rgb: "BFBFBF"
+              rgb: "FFFFFF"
             }
           },
           right: {
             style: "thin",
             color: {
-              rgb: "BFBFBF"
+              rgb: "FFFFFF"
             }
           }
-        },
-
-        alignment: {
-          vertical: "center",
-          horizontal: col === 0 ? "center" : "left"
         }
       };
+    });
 
-      // Warna sel status
-      if (col === 4 && row > 0) {
-        const status = worksheet[cellAddress].v;
+    const range = XLSX.utils.decode_range(
+      worksheet["!ref"]
+    );
 
-        if (status === "Accurate") {
-          worksheet[cellAddress].s = {
-            ...worksheet[cellAddress].s,
-            fill: {
-              fgColor: {
-                rgb: "C6EFCE"
-              }
-            },
-            font: {
-              bold: true,
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+
+        const cellAddress = XLSX.utils.encode_cell({
+          r: row,
+          c: col
+        });
+
+        if (!worksheet[cellAddress]) continue;
+
+        worksheet[cellAddress].s = {
+          ...(worksheet[cellAddress].s || {}),
+
+          border: {
+            top: {
+              style: "thin",
               color: {
-                rgb: "006100"
+                rgb: "BFBFBF"
               }
             },
-            alignment: {
-              horizontal: "center",
-              vertical: "center"
-            }
-          };
-        } else {
-          worksheet[cellAddress].s = {
-            ...worksheet[cellAddress].s,
-            fill: {
-              fgColor: {
-                rgb: "FFC7CE"
-              }
-            },
-            font: {
-              bold: true,
+            bottom: {
+              style: "thin",
               color: {
-                rgb: "9C0006"
+                rgb: "BFBFBF"
               }
             },
-            alignment: {
-              horizontal: "center",
-              vertical: "center"
+            left: {
+              style: "thin",
+              color: {
+                rgb: "BFBFBF"
+              }
+            },
+            right: {
+              style: "thin",
+              color: {
+                rgb: "BFBFBF"
+              }
             }
-          };
+          },
+
+          alignment: {
+            vertical: "center",
+            horizontal: col === 0 ? "center" : "left"
+          }
+        };
+
+        if (col === 4 && row > 0) {
+          const status = worksheet[cellAddress].v;
+
+          if (status === "Accurate") {
+            worksheet[cellAddress].s = {
+              ...worksheet[cellAddress].s,
+              fill: {
+                fgColor: {
+                  rgb: "C6EFCE"
+                }
+              },
+              font: {
+                bold: true,
+                color: {
+                  rgb: "006100"
+                }
+              },
+              alignment: {
+                horizontal: "center",
+                vertical: "center"
+              }
+            };
+          } else {
+            worksheet[cellAddress].s = {
+              ...worksheet[cellAddress].s,
+              fill: {
+                fgColor: {
+                  rgb: "FFC7CE"
+                }
+              },
+              font: {
+                bold: true,
+                color: {
+                  rgb: "9C0006"
+                }
+              },
+              alignment: {
+                horizontal: "center",
+                vertical: "center"
+              }
+            };
+          }
         }
       }
     }
+
+    worksheet["!autofilter"] = {
+      ref: worksheet["!ref"]
+    };
+
+    worksheet["!freeze"] = {
+      xSplit: 0,
+      ySplit: 1
+    };
+
+    XLSX.writeFile(
+      workbook,
+      "E-Nose-ML-Validation-Report.xlsx"
+    );
   }
-
-  // Filter tabel
-  worksheet["!autofilter"] = {
-    ref: worksheet["!ref"]
-  };
-
-  // Bekukan baris header
-  worksheet["!freeze"] = {
-    xSplit: 0,
-    ySplit: 1
-  };
-
-  // Export Excel
-  XLSX.writeFile(
-    workbook,
-    "E-Nose-ML-Validation-Report.xlsx"
-  );
-}
 
   const chart = data.map((x,i)=>{
     const s = x.data?.sensors ?? x.sensors ?? x.data ?? {};
@@ -462,7 +452,6 @@ function App() {
         <h1>E-Nose Coffee Dashboard</h1>
         <p>ESP32-S3 → Rust Backend → Azure Cosmos DB → React</p>
       </div>
-      {/* Indikator Status Live */}
       <div style={{display: "flex", gap: "10px"}}>
         <div className="status-badge">
           <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
@@ -475,25 +464,24 @@ function App() {
       </div>
     </div>
 
-<div className="toolbar">
-  <select value={type} onChange={e => setType(e.target.value)}>
-    <option value="robusta">Robusta</option>
-    <option value="arabika">Arabika</option>
-    <option value="liberika">Liberika</option>
-    <option value="excelsa">Excelsa</option>
-    <option value="gayo">Gayo</option>
-  </select>
+    <div className="toolbar">
+      <select value={type} onChange={e => setType(e.target.value)}>
+        <option value="robusta">Robusta</option>
+        <option value="arabika">Arabika</option>
+        <option value="liberika">Liberika</option>
+        <option value="excelsa">Excelsa</option>
+        <option value="gayo">Gayo</option>
+      </select>
 
-  <button className="export-pdf" onClick={exportPDF}>
-    📄 Export Validation PDF
-  </button>
+      <button className="export-pdf" onClick={exportPDF}>
+        📄 Export Validation PDF
+      </button>
 
-  <button className="export-csv" onClick={exportCSV}>
-    📊 Export Sensor CSV
-  </button>
-</div>
+      <button className="export-csv" onClick={exportCSV}>
+        📊 Export Sensor CSV
+      </button>
+    </div>
 
-    {/* Kartu Statistik dengan Ikon Relevan & Metrik Akurasi ML */}
     <section className="cards">
       <Card title="Sampling" value={stats?.count ?? 0} icon="📦" />
       <Card title="Model Accuracy" value="92.5%" icon="🎯" />
@@ -542,8 +530,6 @@ function App() {
                 <td>{sensorData.mq2}</td>
                 <td>{sensorData.mq3}</td>
                 <td>{sensorData.mq135}</td>
-                <td>{sensorData.mq138}</td>
-                <td>{sensorData.temperature}</td>
                 <td>{sensorData.humidity}</td>
               </tr>
             );
