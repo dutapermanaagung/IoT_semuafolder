@@ -5,9 +5,10 @@ import jsPDF from "jspdf";
 import "./style.css";
 import * as XLSX from "xlsx-js-style";
 
-const API_PORT = import.meta.env.VITE_BACKEND_PORT || "8081";
-const API = import.meta.env.VITE_API_URL || `http://127.0.0.1:${API_PORT}`;
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://127.0.0.1:${API_PORT}/ws`;
+const CONTAINER_URL = "backend-db.bravedesert-90e1dd1a.indonesiacentral.azurecontainerapps.io";
+
+const API = import.meta.env.VITE_API_URL || `https://${CONTAINER_URL}`;
+const WS_URL = import.meta.env.VITE_WS_URL || `wss://${CONTAINER_URL}/ws`;
 
 function App() {
   const [type, setType] = useState("robusta");
