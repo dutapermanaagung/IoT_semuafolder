@@ -41,7 +41,7 @@ function App() {
   async function load() {
     try {
       const rows = await fetch(`${API}/api/sampling?coffee_type=${type}`).then(r=>r.json());
-      setData(rows.reverse());
+      setData(rows.reverse()); // Oldest first untuk keperluan charting
       const s = await fetch(`${API}/api/statistics?coffee_type=${type}`).then(r=>r.json());
       setStats(s);
     } catch (err) {
@@ -52,7 +52,7 @@ function App() {
   useEffect(() => { 
     checkHealth();
     load(); 
-    const healthInterval = setInterval(checkHealth, 10000); // Cek status tiap 10 detik
+    const healthInterval = setInterval(checkHealth, 10000);
     return () => clearInterval(healthInterval);
   }, [type]);
 
@@ -63,7 +63,7 @@ function App() {
       const incomingType = item.coffee_type || item.data?.coffee_type;
       
       if (incomingType === type) {
-        setData(prev => [...prev, item].slice(-100));
+        setData(prev => [...prev, item].slice(-100)); // Menyimpan 100 data terakhir di chart
       }
     };
     ws.onerror = () => setIsOnline(false);
@@ -71,13 +71,36 @@ function App() {
     return () => ws.close();
   }, [type]);
 
+  // Transformasi data aktual Cosmos DB untuk Ekspor (PDF & CSV)
+  const getActualExportData = () => {
+    return data.map((item, index) => {
+      const confScore = item.data?.confidence_score ?? item.confidence_score ?? item.data?.sensors?.confidence_score;
+      const isAccurate = confScore !== undefined && confScore >= 90;
+      const s = item.data?.sensors ?? item.sensors ?? item.data ?? {};
+      
+      return {
+        No: index + 1,
+        Time: new Date(item.timestamp).toLocaleTimeString("id-ID"),
+        Temp: s.temperature ?? 0,
+        Hum: s.humidity ?? 0,
+        MQ3: s.mq3 ?? 0,
+        MQ6: s.mq6 ?? 0,
+        MQ7: s.mq7 ?? 0,
+        MQ135: s.mq135 ?? 0,
+        TGS2600: s.tgs2600 ?? 0,
+        TGS2602: s.tgs2602 ?? 0,
+        TGS2611: s.tgs2611 ?? 0,
+        TGS2620: s.tgs2620 ?? 0,
+        Classification: item.data?.coffee_type || item.coffee_type || "Unknown",
+        "Confidence Score": confScore !== undefined ? `${confScore}%` : "Not trained",
+        "Accuration Status": confScore !== undefined ? (isAccurate ? "Accurate" : "Not Accurate") : "Not yet trained in edge impulse"
+      };
+    });
+  };
+
   function exportPDF() {
     const pdf = new jsPDF();
-    const currentDate = new Date().toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric"
-    });
+    const currentDate = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" });
     const currentTime = new Date().toLocaleTimeString("id-ID");
 
     pdf.setFontSize(14);
@@ -93,38 +116,20 @@ function App() {
     pdf.text("Device Used: esp32s3-device-01", 14, 26);
     pdf.text(`Tanggal Pengujian: ${currentDate} ${currentTime}`, 14, 32);
 
-    const coffeeVariants = ["arabika", "robusta", "liberika", "excelsa", "gayo"];
-    let allMockSamples = [];
+    const actualSamples = getActualExportData();
+
+    // Hitung akurasi dari data aktual Cosmos DB
+    let validCount = 0;
     let accurateCount = 0;
-    let notAccurateCount = 0;
-
-    let sampleCounter = 1;
-    coffeeVariants.forEach((variant) => {
-      for (let i = 1; i <= 8; i++) {
-        const randomFactor = (Math.sin(sampleCounter) + 1) / 2;
-        let confScore = Number((78 + randomFactor * 21.5).toFixed(1)); 
-        if (i === 4 || i === 7) {
-          confScore = Number((82 + Math.random() * 7).toFixed(1));
-        }
-
-        const isAccurate = confScore >= 90;
-        if (isAccurate) accurateCount++;
-        else notAccurateCount++;
-
-        const sampleTime = new Date(Date.now() - (40 - sampleCounter) * 60000).toLocaleTimeString("id-ID");
-
-        allMockSamples.push({
-          no: sampleCounter,
-          time: sampleTime,
-          classification: `${variant}_${i}`,
-          confidence: `${confScore}%`,
-          status: isAccurate ? "Accurate" : "Not Accurate"
-        });
-        sampleCounter++;
+    actualSamples.forEach(item => {
+      if (item["Confidence Score"] !== "Not trained") {
+        validCount++;
+        if (item["Accuration Status"] === "Accurate") accurateCount++;
       }
     });
 
-    const totalAccuracyPercent = ((accurateCount / 40) * 100).toFixed(1);
+    const notAccurateCount = validCount - accurateCount;
+    const totalAccuracyPercent = validCount > 0 ? ((accurateCount / validCount) * 100).toFixed(1) + "%" : "N/A";
 
     let summaryY = 38;
     pdf.setFillColor(245, 247, 250);
@@ -135,17 +140,17 @@ function App() {
     pdf.setFontSize(9);
     pdf.setFont("helvetica", "bold");
     pdf.text("Total Sample", 22, summaryY + 6);
-    pdf.text("Variant Coffee", 62, summaryY + 6);
+    pdf.text("Trained Data", 62, summaryY + 6);
     pdf.text("Accurate (>=90%)", 107, summaryY + 6);
     pdf.text("Not Accurate", 145, summaryY + 6);
     pdf.text("Total Accuracy", 175, summaryY + 6);
 
     pdf.setFont("helvetica", "normal");
-    pdf.text("40", 25, summaryY + 13);
-    pdf.text("5 Variants", 65, summaryY + 13);
+    pdf.text(actualSamples.length.toString(), 25, summaryY + 13);
+    pdf.text(validCount.toString(), 65, summaryY + 13);
     pdf.text(accurateCount.toString(), 115, summaryY + 13);
     pdf.text(notAccurateCount.toString(), 152, summaryY + 13);
-    pdf.text(`${totalAccuracyPercent}%`, 180, summaryY + 13);
+    pdf.text(totalAccuracyPercent, 180, summaryY + 13);
 
     let startY = 64;
     pdf.setFont("helvetica", "bold");
@@ -158,17 +163,17 @@ function App() {
     pdf.setTextColor(255, 255, 255);
     pdf.rect(14, startY, 182, 7, "F");
     pdf.text("No", 17, startY + 5);
-    pdf.text("Time", 35, startY + 5);
-    pdf.text("Classification", 70, startY + 5);
-    pdf.text("Confidence Score", 120, startY + 5);
-    pdf.text("Accuration Status", 160, startY + 5);
+    pdf.text("Time", 30, startY + 5);
+    pdf.text("Classification", 65, startY + 5);
+    pdf.text("Confidence", 105, startY + 5);
+    pdf.text("Accuration Status", 140, startY + 5);
 
     startY += 7;
     pdf.setTextColor(0, 0, 0);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
 
-    allMockSamples.forEach((item, index) => {
+    actualSamples.forEach((item, index) => {
       if (startY > 275) {
         pdf.addPage();
         startY = 20;
@@ -179,17 +184,19 @@ function App() {
         pdf.rect(14, startY, 182, 6, "F");
       }
 
-      pdf.text(item.no.toString(), 17, startY + 4);
-      pdf.text(item.time, 35, startY + 4);
-      pdf.text(item.classification, 70, startY + 4);
-      pdf.text(item.confidence, 120, startY + 4);
+      pdf.text(item.No.toString(), 17, startY + 4);
+      pdf.text(item.Time, 30, startY + 4);
+      pdf.text(item.Classification, 65, startY + 4);
+      pdf.text(item["Confidence Score"], 105, startY + 4);
       
-      if (item.status === "Accurate") {
+      if (item["Accuration Status"] === "Accurate") {
         pdf.setTextColor(39, 174, 96);
-      } else {
+      } else if (item["Accuration Status"] === "Not Accurate") {
         pdf.setTextColor(192, 57, 43);
+      } else {
+        pdf.setTextColor(100, 100, 100);
       }
-      pdf.text(item.status, 160, startY + 4);
+      pdf.text(item["Accuration Status"], 140, startY + 4);
       
       pdf.setTextColor(0, 0, 0);
       pdf.setDrawColor(230, 230, 230);
@@ -202,249 +209,133 @@ function App() {
   }
 
   function exportCSV() {
-    const coffeeVariants = [
-      "arabika",
-      "robusta",
-      "liberika",
-      "excelsa",
-      "gayo"
+    const actualSamples = getActualExportData();
+    const worksheet = XLSX.utils.json_to_sheet(actualSamples);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Validation Data");
+
+    // Menyesuaikan lebar kolom CSV (Termasuk Sensor Gas dan Env)
+    worksheet["!cols"] = [
+      { wch: 5 },  // No
+      { wch: 12 }, // Time
+      { wch: 8 },  // Temp
+      { wch: 8 },  // Hum
+      { wch: 8 },  // MQ3
+      { wch: 8 },  // MQ6
+      { wch: 8 },  // MQ7
+      { wch: 8 },  // MQ135
+      { wch: 10 }, // TGS2600
+      { wch: 10 }, // TGS2602
+      { wch: 10 }, // TGS2611
+      { wch: 10 }, // TGS2620
+      { wch: 15 }, // Classification
+      { wch: 18 }, // Confidence
+      { wch: 28 }  // Status
     ];
+    worksheet["!rows"] = [{ hpt: 25 }];
 
-    let allMockSamples = [];
-    let sampleCounter = 1;
-
-    coffeeVariants.forEach((variant) => {
-      for (let i = 1; i <= 8; i++) {
-        const randomFactor = (Math.sin(sampleCounter) + 1) / 2;
-
-        let confScore = Number(
-          (78 + randomFactor * 21.5).toFixed(1)
-        );
-
-        if (i === 4 || i === 7) {
-          confScore = Number(
-            (82 + Math.random() * 7).toFixed(1)
-          );
-        }
-
-        const isAccurate = confScore >= 90;
-
-        const sampleTime = new Date(
-          Date.now() - (40 - sampleCounter) * 60000
-        ).toLocaleTimeString("id-ID");
-
-        allMockSamples.push({
-          No: sampleCounter,
-          Time: sampleTime,
-          Classification: `${variant}_${i}`,
-          "Confidence Score": `${confScore}%`,
-          "Accuration Status": isAccurate
-            ? "Accurate"
-            : "Not Accurate"
-        });
-
-        sampleCounter++;
+    const headerCells = ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1", "I1", "J1", "K1", "L1", "M1", "N1", "O1"];
+    headerCells.forEach((cell) => {
+      if(worksheet[cell]) {
+        worksheet[cell].s = {
+          fill: { fgColor: { rgb: "D35400" } },
+          font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+          alignment: { horizontal: "center", vertical: "center" },
+          border: {
+            top: { style: "thin", color: { rgb: "FFFFFF" } },
+            bottom: { style: "thin", color: { rgb: "FFFFFF" } },
+            left: { style: "thin", color: { rgb: "FFFFFF" } },
+            right: { style: "thin", color: { rgb: "FFFFFF" } }
+          }
+        };
       }
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(allMockSamples);
-    const workbook = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      "Validation Data"
-    );
-
-    worksheet["!cols"] = [
-      { wch: 8 },
-      { wch: 15 },
-      { wch: 22 },
-      { wch: 20 },
-      { wch: 22 }
-    ];
-
-    worksheet["!rows"] = [
-      { hpt: 25 }
-    ];
-
-    const headerCells = [
-      "A1",
-      "B1",
-      "C1",
-      "D1",
-      "E1"
-    ];
-
-    headerCells.forEach((cell) => {
-      worksheet[cell].s = {
-        fill: {
-          fgColor: {
-            rgb: "D35400"
-          }
-        },
-        font: {
-          name: "Arial",
-          sz: 11,
-          bold: true,
-          color: {
-            rgb: "FFFFFF"
-          }
-        },
-        alignment: {
-          horizontal: "center",
-          vertical: "center"
-        },
-        border: {
-          top: {
-            style: "thin",
-            color: {
-              rgb: "FFFFFF"
-            }
-          },
-          bottom: {
-            style: "thin",
-            color: {
-              rgb: "FFFFFF"
-            }
-          },
-          left: {
-            style: "thin",
-            color: {
-              rgb: "FFFFFF"
-            }
-          },
-          right: {
-            style: "thin",
-            color: {
-              rgb: "FFFFFF"
-            }
-          }
-        }
-      };
-    });
-
-    const range = XLSX.utils.decode_range(
-      worksheet["!ref"]
-    );
-
+    const range = XLSX.utils.decode_range(worksheet["!ref"]);
     for (let row = range.s.r; row <= range.e.r; row++) {
       for (let col = range.s.c; col <= range.e.c; col++) {
-
-        const cellAddress = XLSX.utils.encode_cell({
-          r: row,
-          c: col
-        });
-
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
         if (!worksheet[cellAddress]) continue;
 
         worksheet[cellAddress].s = {
           ...(worksheet[cellAddress].s || {}),
-
           border: {
-            top: {
-              style: "thin",
-              color: {
-                rgb: "BFBFBF"
-              }
-            },
-            bottom: {
-              style: "thin",
-              color: {
-                rgb: "BFBFBF"
-              }
-            },
-            left: {
-              style: "thin",
-              color: {
-                rgb: "BFBFBF"
-              }
-            },
-            right: {
-              style: "thin",
-              color: {
-                rgb: "BFBFBF"
-              }
-            }
+            top: { style: "thin", color: { rgb: "BFBFBF" } },
+            bottom: { style: "thin", color: { rgb: "BFBFBF" } },
+            left: { style: "thin", color: { rgb: "BFBFBF" } },
+            right: { style: "thin", color: { rgb: "BFBFBF" } }
           },
-
           alignment: {
             vertical: "center",
             horizontal: col === 0 ? "center" : "left"
           }
         };
 
-        if (col === 4 && row > 0) {
+        // Kolom Status ada di index 14 (Kolom O)
+        if (col === 14 && row > 0) {
           const status = worksheet[cellAddress].v;
-
           if (status === "Accurate") {
             worksheet[cellAddress].s = {
               ...worksheet[cellAddress].s,
-              fill: {
-                fgColor: {
-                  rgb: "C6EFCE"
-                }
-              },
-              font: {
-                bold: true,
-                color: {
-                  rgb: "006100"
-                }
-              },
-              alignment: {
-                horizontal: "center",
-                vertical: "center"
-              }
+              fill: { fgColor: { rgb: "C6EFCE" } },
+              font: { bold: true, color: { rgb: "006100" } },
+              alignment: { horizontal: "center", vertical: "center" }
             };
-          } else {
+          } else if (status === "Not Accurate") {
             worksheet[cellAddress].s = {
               ...worksheet[cellAddress].s,
-              fill: {
-                fgColor: {
-                  rgb: "FFC7CE"
-                }
-              },
-              font: {
-                bold: true,
-                color: {
-                  rgb: "9C0006"
-                }
-              },
-              alignment: {
-                horizontal: "center",
-                vertical: "center"
-              }
+              fill: { fgColor: { rgb: "FFC7CE" } },
+              font: { bold: true, color: { rgb: "9C0006" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else {
+             worksheet[cellAddress].s = {
+              ...worksheet[cellAddress].s,
+              font: { color: { rgb: "666666" } },
+              alignment: { horizontal: "center", vertical: "center" }
             };
           }
         }
       }
     }
 
-    worksheet["!autofilter"] = {
-      ref: worksheet["!ref"]
-    };
+    worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+    worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
 
-    worksheet["!freeze"] = {
-      xSplit: 0,
-      ySplit: 1
-    };
-
-    XLSX.writeFile(
-      workbook,
-      "E-Nose-ML-Validation-Report.xlsx"
-    );
+    XLSX.writeFile(workbook, "E-Nose-ML-Validation-Report.xlsx");
   }
 
-  const chart = data.map((x,i)=>{
+  // Persiapan data 100% REAL Cosmos DB untuk Multi-chart dan Grafik Kecil
+  const chartData = data.map((x, i) => {
     const s = x.data?.sensors ?? x.sensors ?? x.data ?? {};
     return {
       n: i + 1, 
-      MQ2: s.mq2 ?? 0, 
       MQ3: s.mq3 ?? 0, 
+      MQ6: s.mq6 ?? 0,
+      MQ7: s.mq7 ?? 0,
       MQ135: s.mq135 ?? 0, 
-      MQ138: s.mq138 ?? 0
+      TGS2600: s.tgs2600 ?? 0,
+      TGS2602: s.tgs2602 ?? 0,
+      TGS2611: s.tgs2611 ?? 0,
+      TGS2620: s.tgs2620 ?? 0,
+      Temp: s.temperature ?? 0,
+      Hum: s.humidity ?? 0,
     };
   });
+
+  // Array sensor untuk 10 Grafik Kecil (Sesuai Dosen)
+  const sensorKeys = ['MQ3', 'MQ6', 'MQ7', 'MQ135', 'TGS2600', 'TGS2602', 'TGS2611', 'TGS2620', 'Temp', 'Hum'];
+  const colors = ['#e67e22', '#2980b9', '#27ae60', '#8e44ad', '#f1c40f', '#e74c3c', '#34495e', '#16a085', '#c0392b', '#3498db'];
+
+  // Cek Status Training dari data terbaru
+  const latestItem = data[data.length - 1] || {};
+  const latestConf = latestItem?.data?.confidence_score ?? latestItem?.confidence_score ?? latestItem?.data?.sensors?.confidence_score;
+  const isTrained = latestConf !== undefined;
+  
+  const accuracyDisplay = isTrained 
+    ? `${latestConf}%` 
+    : <span style={{fontSize: '13px', lineHeight: '1.2', display: 'block', color: '#7f8c8d'}}>Not yet trained<br/>in edge impulse</span>;
 
   return <main>
     <div className="header-container">
@@ -483,59 +374,102 @@ function App() {
     </div>
 
     <section className="cards">
-      <Card title="Sampling" value={stats?.count ?? 0} icon="📦" />
-      <Card title="Model Accuracy" value="92.5%" icon="🎯" />
-      <Card title="MQ-2 Avg" value={stats?.mq2_avg?.toFixed(2) ?? "-"} icon="💨" />
-      <Card title="MQ-3 Avg" value={stats?.mq3_avg?.toFixed(2) ?? "-"} icon="🧪" />
-      <Card title="MQ-135 Avg" value={stats?.mq135_avg?.toFixed(2) ?? "-"} icon="🌡️" />
+      <Card title="Sampling" value={data.length ?? 0} icon="📦" />
+      <Card title="Model Accuracy" value={accuracyDisplay} icon="🎯" />
+      <Card title="Temp Avg" value={stats?.temperature_avg?.toFixed(2) ?? "-"} icon="🌡️" />
+      <Card title="MQ-3 Avg" value={stats?.mq3_avg?.toFixed(2) ?? "-"} icon="💨" />
+      <Card title="MQ-135 Avg" value={stats?.mq135_avg?.toFixed(2) ?? "-"} icon="🧪" />
     </section>
 
+    {/* Section 10 Grafik Kecil Individual (Real Data) */}
     <section className="panel">
-      <h2>Real-Time Sensor (Multichart)</h2>
+      <h2>Individual Sensor Trends (8 Gas + 2 Env)</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginTop: '15px' }}>
+        {sensorKeys.map((sensor, idx) => (
+          <div key={sensor} style={{ border: '1px solid #e0e6ed', padding: '10px', borderRadius: '8px', background: '#fafbfc' }}>
+            <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: '#2c3e50', fontSize: '13px' }}>{sensor}</h4>
+            <ResponsiveContainer width="100%" height={120}>
+              <LineChart data={chartData}>
+                <XAxis dataKey="n" hide />
+                <YAxis width={30} fontSize={10} tickFormatter={(tick) => Math.round(tick)} />
+                <Tooltip contentStyle={{ fontSize: '12px', padding: '5px' }} />
+                <Line type="monotone" dataKey={sensor} stroke={colors[idx]} strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    {/* Section Grafik Besar Gabungan (Real Data) */}
+    <section className="panel">
+      <h2>Combined Sensors Overview (Multichart)</h2>
       <ResponsiveContainer width="100%" height={350}>
-        <LineChart data={chart}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3"/>
           <XAxis dataKey="n"/>
           <YAxis/>
           <Tooltip/>
           <Legend/>
-          <Line type="monotone" dataKey="MQ2" stroke="#e67e22" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="MQ3" stroke="#2980b9" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="MQ135" stroke="#27ae60" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="MQ138" stroke="#8e44ad" strokeWidth={2} dot={false} />
+          {sensorKeys.map((sensor, idx) => (
+             <Line key={sensor} type="monotone" dataKey={sensor} stroke={colors[idx]} strokeWidth={2} dot={false} />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </section>
 
     <section className="panel">
       <h2>Sampling Data & ML Classification</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>MQ2</th>
-            <th>MQ3</th>
-            <th>MQ135</th>
-            <th>MQ138</th>
-            <th>Temp</th>
-            <th>RH</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.slice().reverse().map(x => {
-            const sensorData = x.data?.sensors ?? x.sensors ?? x.data ?? {};
-            return (
-              <tr key={x.id ?? Math.random()}>
-                <td>{new Date(x.timestamp).toLocaleString()}</td>
-                <td>{sensorData.mq2}</td>
-                <td>{sensorData.mq3}</td>
-                <td>{sensorData.mq135}</td>
-                <td>{sensorData.humidity}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div style={{overflowX: 'auto'}}>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Temp</th>
+              <th>RH</th>
+              <th>MQ3</th>
+              <th>MQ6</th>
+              <th>MQ7</th>
+              <th>MQ135</th>
+              <th>TGS2600</th>
+              <th>TGS2602</th>
+              <th>TGS2611</th>
+              <th>TGS2620</th>
+              <th>Confidence</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.slice().reverse().map(x => {
+              const sensorData = x.data?.sensors ?? x.sensors ?? x.data ?? {};
+              const confScore = x.data?.confidence_score ?? x.confidence_score ?? sensorData.confidence_score;
+              const isAccurate = confScore !== undefined && confScore >= 90;
+              
+              return (
+                <tr key={x.id ?? Math.random()}>
+                  <td>{new Date(x.timestamp).toLocaleString()}</td>
+                  <td>{sensorData.temperature ?? 0}</td>
+                  <td>{sensorData.humidity ?? 0}</td>
+                  <td>{sensorData.mq3 ?? 0}</td>
+                  <td>{sensorData.mq6 ?? 0}</td>
+                  <td>{sensorData.mq7 ?? 0}</td>
+                  <td>{sensorData.mq135 ?? 0}</td>
+                  <td>{sensorData.tgs2600 ?? 0}</td>
+                  <td>{sensorData.tgs2602 ?? 0}</td>
+                  <td>{sensorData.tgs2611 ?? 0}</td>
+                  <td>{sensorData.tgs2620 ?? 0}</td>
+                  <td>{confScore !== undefined ? `${confScore}%` : "-"}</td>
+                  <td>
+                    {confScore !== undefined 
+                      ? (isAccurate ? <strong style={{color: '#27ae60'}}>Accurate</strong> : <strong style={{color: '#c0392b'}}>Not Accurate</strong>) 
+                      : <span style={{color: '#7f8c8d'}}>Not Trained</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
 }
