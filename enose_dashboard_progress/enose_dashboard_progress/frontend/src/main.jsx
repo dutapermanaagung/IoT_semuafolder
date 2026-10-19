@@ -11,11 +11,17 @@ const WS_URL = import.meta.env.VITE_WS_URL || `wss://${CONTAINER_URL}/ws`;
 
 function App() {
   const [type, setType] = useState("robusta");
+  const [status, setStatus] = useState("Green Bean");
+  const [batch, setBatch] = useState("1"); // State untuk Batch 1-10 atau "all"
   const [data, setData] = useState([]);
   const [stats, setStats] = useState(null);
   const [backendStatus, setBackendStatus] = useState("Checking...");
   const [dbStatus, setDbStatus] = useState("Checking...");
   const [isOnline, setIsOnline] = useState(false);
+  
+  // State untuk Pagination Tabel
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   // Fungsi untuk mengecek kesehatan backend & koneksi Cosmos DB
   async function checkHealth() {
@@ -38,11 +44,15 @@ function App() {
     }
   }
 
+  // Load data berdasarkan jenis kopi, status bean, DAN batch
   async function load() {
     try {
-      const rows = await fetch(`${API}/api/sampling?coffee_type=${type}`).then(r=>r.json());
+      // Jika batch === "all", hilangkan parameter batch agar backend mengirimkan semua data
+      const batchQuery = batch === "all" ? "" : `&batch=${batch}`;
+      const rows = await fetch(`${API}/api/sampling?coffee_type=${type}&bean_status=${status}${batchQuery}`).then(r=>r.json());
       setData(rows.reverse()); // Oldest first untuk keperluan charting
-      const s = await fetch(`${API}/api/statistics?coffee_type=${type}`).then(r=>r.json());
+      
+      const s = await fetch(`${API}/api/statistics?coffee_type=${type}&bean_status=${status}${batchQuery}`).then(r=>r.json());
       setStats(s);
     } catch (err) {
       console.error("Gagal memuat data:", err);
@@ -54,22 +64,46 @@ function App() {
     load(); 
     const healthInterval = setInterval(checkHealth, 10000);
     return () => clearInterval(healthInterval);
-  }, [type]);
+  }, [type, status, batch]);
 
   useEffect(() => {
     const ws = new WebSocket(WS_URL);
     ws.onmessage = e => {
       const item = JSON.parse(e.data);
       const incomingType = item.coffee_type || item.data?.coffee_type;
+      const incomingStatus = item.bean_status || item.data?.bean_status;
+      const incomingBatch = item.batch || item.data?.batch;
       
-      if (incomingType === type) {
-        setData(prev => [...prev, item].slice(-100)); // Menyimpan 100 data terakhir di chart
+      const isTypeMatch = incomingType === type;
+      const isStatusMatch = !incomingStatus || incomingStatus === status;
+      const isBatchMatch = batch === "all" || !incomingBatch || String(incomingBatch) === String(batch);
+
+      // Filter realtime data
+      if (isTypeMatch && isStatusMatch && isBatchMatch) {
+        const limit = batch === "all" ? -2000 : -100; // Jika 'all', perbesar batas array agar grafik total tidak terpotong
+        setData(prev => [...prev, item].slice(limit));
       }
     };
     ws.onerror = () => setIsOnline(false);
     ws.onopen = () => setIsOnline(true);
     return () => ws.close();
-  }, [type]);
+  }, [type, status, batch]);
+
+  // Reset pagination ke halaman 1 setiap ganti filter
+  const handleTypeChange = (e) => {
+    setType(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleStatusChange = (e) => {
+    setStatus(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleBatchChange = (e) => {
+    setBatch(e.target.value);
+    setCurrentPage(1);
+  };
 
   // Transformasi data aktual Cosmos DB untuk Ekspor (PDF & CSV)
   const getActualExportData = () => {
@@ -92,6 +126,8 @@ function App() {
         TGS2611: s.tgs2611 ?? 0,
         TGS2620: s.tgs2620 ?? 0,
         Classification: item.data?.coffee_type || item.coffee_type || "Unknown",
+        Status: item.data?.bean_status || item.bean_status || status,
+        Batch: item.data?.batch || item.batch || (batch === "all" ? "Mixed" : batch),
         "Confidence Score": confScore !== undefined ? `${confScore}%` : "Not trained",
         "Accuration Status": confScore !== undefined ? (isAccurate ? "Accurate" : "Not Accurate") : "Not yet trained in edge impulse"
       };
@@ -115,10 +151,12 @@ function App() {
     pdf.setFont("helvetica", "normal");
     pdf.text("Device Used: esp32s3-device-01", 14, 26);
     pdf.text(`Tanggal Pengujian: ${currentDate} ${currentTime}`, 14, 32);
+    
+    const batchLabel = batch === "all" ? "Total Batch" : `Batch ${batch}`;
+    pdf.text(`Sample Setup: ${type.toUpperCase()} | ${status} | ${batchLabel}`, 14, 38);
 
     const actualSamples = getActualExportData();
 
-    // Hitung akurasi dari data aktual Cosmos DB
     let validCount = 0;
     let accurateCount = 0;
     actualSamples.forEach(item => {
@@ -131,7 +169,7 @@ function App() {
     const notAccurateCount = validCount - accurateCount;
     const totalAccuracyPercent = validCount > 0 ? ((accurateCount / validCount) * 100).toFixed(1) + "%" : "N/A";
 
-    let summaryY = 38;
+    let summaryY = 44;
     pdf.setFillColor(245, 247, 250);
     pdf.rect(14, summaryY, 182, 18, "F");
     pdf.setDrawColor(210, 215, 220);
@@ -152,7 +190,7 @@ function App() {
     pdf.text(notAccurateCount.toString(), 152, summaryY + 13);
     pdf.text(totalAccuracyPercent, 180, summaryY + 13);
 
-    let startY = 64;
+    let startY = 70;
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(11);
     pdf.text("Detailed Classification & Confidence Results", 14, startY);
@@ -164,9 +202,10 @@ function App() {
     pdf.rect(14, startY, 182, 7, "F");
     pdf.text("No", 17, startY + 5);
     pdf.text("Time", 30, startY + 5);
-    pdf.text("Classification", 65, startY + 5);
-    pdf.text("Confidence", 105, startY + 5);
-    pdf.text("Accuration Status", 140, startY + 5);
+    pdf.text("Class", 55, startY + 5);
+    pdf.text("Status", 80, startY + 5);
+    pdf.text("Confidence", 110, startY + 5);
+    pdf.text("Accuration Status", 145, startY + 5);
 
     startY += 7;
     pdf.setTextColor(0, 0, 0);
@@ -186,8 +225,9 @@ function App() {
 
       pdf.text(item.No.toString(), 17, startY + 4);
       pdf.text(item.Time, 30, startY + 4);
-      pdf.text(item.Classification, 65, startY + 4);
-      pdf.text(item["Confidence Score"], 105, startY + 4);
+      pdf.text(item.Classification, 55, startY + 4);
+      pdf.text(item.Status, 80, startY + 4);
+      pdf.text(item["Confidence Score"], 110, startY + 4);
       
       if (item["Accuration Status"] === "Accurate") {
         pdf.setTextColor(39, 174, 96);
@@ -196,7 +236,7 @@ function App() {
       } else {
         pdf.setTextColor(100, 100, 100);
       }
-      pdf.text(item["Accuration Status"], 140, startY + 4);
+      pdf.text(item["Accuration Status"], 145, startY + 4);
       
       pdf.setTextColor(0, 0, 0);
       pdf.setDrawColor(230, 230, 230);
@@ -215,7 +255,6 @@ function App() {
 
     XLSX.utils.book_append_sheet(workbook, worksheet, "Validation Data");
 
-    // Menyesuaikan lebar kolom CSV (Termasuk Sensor Gas dan Env)
     worksheet["!cols"] = [
       { wch: 5 },  // No
       { wch: 12 }, // Time
@@ -230,12 +269,14 @@ function App() {
       { wch: 10 }, // TGS2611
       { wch: 10 }, // TGS2620
       { wch: 15 }, // Classification
+      { wch: 15 }, // Status
+      { wch: 10 }, // Batch
       { wch: 18 }, // Confidence
-      { wch: 28 }  // Status
+      { wch: 28 }  // Status Accuration
     ];
     worksheet["!rows"] = [{ hpt: 25 }];
 
-    const headerCells = ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1", "I1", "J1", "K1", "L1", "M1", "N1", "O1"];
+    const headerCells = ["A1", "B1", "C1", "D1", "E1", "F1", "G1", "H1", "I1", "J1", "K1", "L1", "M1", "N1", "O1", "P1", "Q1"];
     headerCells.forEach((cell) => {
       if(worksheet[cell]) {
         worksheet[cell].s = {
@@ -272,17 +313,16 @@ function App() {
           }
         };
 
-        // Kolom Status ada di index 14 (Kolom O)
-        if (col === 14 && row > 0) {
-          const status = worksheet[cellAddress].v;
-          if (status === "Accurate") {
+        if (col === 16 && row > 0) { // Index P=15, Q=16 untuk Status Accuration
+          const acc_status = worksheet[cellAddress].v;
+          if (acc_status === "Accurate") {
             worksheet[cellAddress].s = {
               ...worksheet[cellAddress].s,
               fill: { fgColor: { rgb: "C6EFCE" } },
               font: { bold: true, color: { rgb: "006100" } },
               alignment: { horizontal: "center", vertical: "center" }
             };
-          } else if (status === "Not Accurate") {
+          } else if (acc_status === "Not Accurate") {
             worksheet[cellAddress].s = {
               ...worksheet[cellAddress].s,
               fill: { fgColor: { rgb: "FFC7CE" } },
@@ -306,7 +346,6 @@ function App() {
     XLSX.writeFile(workbook, "E-Nose-ML-Validation-Report.xlsx");
   }
 
-  // Persiapan data 100% REAL Cosmos DB untuk Multi-chart dan Grafik Kecil
   const chartData = data.map((x, i) => {
     const s = x.data?.sensors ?? x.sensors ?? x.data ?? {};
     return {
@@ -324,11 +363,9 @@ function App() {
     };
   });
 
-  // Array sensor untuk 10 Grafik Kecil (Sesuai Dosen)
   const sensorKeys = ['MQ3', 'MQ6', 'MQ7', 'MQ135', 'TGS2600', 'TGS2602', 'TGS2611', 'TGS2620', 'Temp', 'Hum'];
   const colors = ['#e67e22', '#2980b9', '#27ae60', '#8e44ad', '#f1c40f', '#e74c3c', '#34495e', '#16a085', '#c0392b', '#3498db'];
 
-  // Cek Status Training dari data terbaru
   const latestItem = data[data.length - 1] || {};
   const latestConf = latestItem?.data?.confidence_score ?? latestItem?.confidence_score ?? latestItem?.data?.sensors?.confidence_score;
   const isTrained = latestConf !== undefined;
@@ -336,6 +373,13 @@ function App() {
   const accuracyDisplay = isTrained 
     ? `${latestConf}%` 
     : <span style={{fontSize: '13px', lineHeight: '1.2', display: 'block', color: '#7f8c8d'}}>Not yet trained<br/>in edge impulse</span>;
+
+  // ==== LOGIKA PAGINATION TABEL ====
+  const reversedTableData = data.slice().reverse(); // Data terbaru di atas
+  const totalPages = Math.ceil(reversedTableData.length / ITEMS_PER_PAGE);
+  const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+  const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+  const currentTableItems = reversedTableData.slice(indexOfFirstItem, indexOfLastItem);
 
   return <main>
     <div className="header-container">
@@ -356,12 +400,28 @@ function App() {
     </div>
 
     <div className="toolbar">
-      <select value={type} onChange={e => setType(e.target.value)}>
+      {/* Dropdown 1: Jenis Kopi */}
+      <select value={type} onChange={handleTypeChange}>
         <option value="robusta">Robusta</option>
         <option value="arabika">Arabika</option>
-        <option value="liberika">Liberika</option>
         <option value="excelsa">Excelsa</option>
-        <option value="gayo">Gayo</option>
+      </select>
+
+      {/* Dropdown 2: Status Bean */}
+      <select value={status} onChange={handleStatusChange}>
+        <option value="Green Bean">Green Bean</option>
+        <option value="Roasted">Roasted</option>
+      </select>
+
+      {/* Dropdown 3: Batch Sampling */}
+      <select value={batch} onChange={handleBatchChange}>
+        {[...Array(10)].map((_, i) => (
+          <option key={i + 1} value={i + 1}>
+            Batch {i + 1}
+          </option>
+        ))}
+        {/* Opsi Total Batch Ditambahkan Di Sini */}
+        <option value="all">Total Batch</option>
       </select>
 
       <button className="export-pdf" onClick={exportPDF}>
@@ -374,14 +434,10 @@ function App() {
     </div>
 
     <section className="cards">
-      <Card title="Sampling" value={data.length ?? 0} icon="📦" />
+      <Card title="Total Data" value={data.length ?? 0} icon="📦" />
       <Card title="Model Accuracy" value={accuracyDisplay} icon="🎯" />
-      <Card title="Temp Avg" value={stats?.temperature_avg?.toFixed(2) ?? "-"} icon="🌡️" />
-      <Card title="MQ-3 Avg" value={stats?.mq3_avg?.toFixed(2) ?? "-"} icon="💨" />
-      <Card title="MQ-135 Avg" value={stats?.mq135_avg?.toFixed(2) ?? "-"} icon="🧪" />
     </section>
 
-    {/* Section 10 Grafik Kecil Individual (Real Data) */}
     <section className="panel">
       <h2>Individual Sensor Trends (8 Gas + 2 Env)</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginTop: '15px' }}>
@@ -401,7 +457,6 @@ function App() {
       </div>
     </section>
 
-    {/* Section Grafik Besar Gabungan (Real Data) */}
     <section className="panel">
       <h2>Combined Sensors Overview (Multichart)</h2>
       <ResponsiveContainer width="100%" height={350}>
@@ -435,15 +490,19 @@ function App() {
               <th>TGS2602</th>
               <th>TGS2611</th>
               <th>TGS2620</th>
+              <th>Status Bean</th>
+              <th>Batch</th>
               <th>Confidence</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {data.slice().reverse().map(x => {
+            {currentTableItems.map(x => {
               const sensorData = x.data?.sensors ?? x.sensors ?? x.data ?? {};
               const confScore = x.data?.confidence_score ?? x.confidence_score ?? sensorData.confidence_score;
               const isAccurate = confScore !== undefined && confScore >= 90;
+              const currentStatusBean = x.data?.bean_status ?? x.bean_status ?? status;
+              const currentBatchInfo = x.data?.batch ?? x.batch ?? batch;
               
               return (
                 <tr key={x.id ?? Math.random()}>
@@ -458,6 +517,8 @@ function App() {
                   <td>{sensorData.tgs2602 ?? 0}</td>
                   <td>{sensorData.tgs2611 ?? 0}</td>
                   <td>{sensorData.tgs2620 ?? 0}</td>
+                  <td>{currentStatusBean}</td>
+                  <td>{currentBatchInfo === "all" ? "Mixed" : currentBatchInfo}</td>
                   <td>{confScore !== undefined ? `${confScore}%` : "-"}</td>
                   <td>
                     {confScore !== undefined 
@@ -470,6 +531,31 @@ function App() {
           </tbody>
         </table>
       </div>
+
+      {/* Kontrol Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '20px' }}>
+          <button 
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+            disabled={currentPage === 1}
+            style={{ padding: '6px 12px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', background: currentPage === 1 ? '#ecf0f1' : '#3498db', color: currentPage === 1 ? '#95a5a6' : 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}
+          >
+            &laquo; Previous
+          </button>
+          
+          <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#2c3e50' }}>
+            Page {currentPage} of {totalPages}
+          </span>
+          
+          <button 
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+            disabled={currentPage === totalPages}
+            style={{ padding: '6px 12px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', background: currentPage === totalPages ? '#ecf0f1' : '#3498db', color: currentPage === totalPages ? '#95a5a6' : 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}
+          >
+            Next &raquo;
+          </button>
+        </div>
+      )}
     </section>
   </main>
 }
