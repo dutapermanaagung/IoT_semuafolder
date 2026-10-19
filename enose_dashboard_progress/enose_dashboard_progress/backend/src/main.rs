@@ -32,25 +32,21 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     let endpoint = env::var("COSMOS_ENDPOINT")
-        .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_ENDPOINT tidak ditemukan. Silakan buat file .env di folder backend berdasarkan .env.example"))?;
+        .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_ENDPOINT tidak ditemukan."))?;
     let key = env::var("COSMOS_KEY")
-        .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_KEY tidak ditemukan. Silakan tambahkan COSMOS_KEY ke file .env"))?;
+        .map_err(|_| anyhow::anyhow!("Environment variable COSMOS_KEY tidak ditemukan."))?;
     let database = env::var("COSMOS_DATABASE").unwrap_or_else(|_| "IoTDatabase".into());
     let container = env::var("COSMOS_CONTAINER").unwrap_or_else(|_| "TelemetryData".into());
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
     let port: u16 = env::var("PORT").unwrap_or_else(|_| "8080".into()).parse()?;
     
-    // Inisialisasi repository Cosmos DB
     let repo_result = CosmosRepo::new(endpoint, key, database, container).await;
-    
     match &repo_result {
         Ok(_) => println!("[INFO] Database status: Connected (Azure Cosmos DB OK)"),
         Err(e) => eprintln!("[ERROR] Database status: Disconnected / Error -> {}", e),
     }
-
     let repo = repo_result?;
     let (tx, _) = broadcast::channel(100);
-
     let state = Arc::new(AppState { repo, tx });
 
     let app = Router::new()
@@ -98,7 +94,12 @@ async fn create_sampling(
         },
     };
 
-    state.repo.insert(&item).await.map_err(internal_error)?;
+    // --- PEMISAHAN TUGAS (READ ONLY) ---
+    // Kode di bawah ini DIKOMENTAR agar Rust tidak lagi menulis data format lama ke CosmosDB.
+    // Insert data sepenuhnya diambil alih oleh Azure Function App (Node.js).
+    //
+    // state.repo.insert(&item).await.map_err(internal_error)?;
+    // -----------------------------------
 
     let msg = serde_json::to_string(&item).map_err(internal_error)?;
     let _ = state.tx.send(msg);

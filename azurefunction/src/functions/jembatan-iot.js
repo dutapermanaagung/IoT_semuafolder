@@ -25,6 +25,7 @@ function getWibTimestampForId() {
 app.eventHub('jembatan-iot', {
     connection: 'IotHubEndpointConnectionString',
     eventHubName: 'iothub-ehub-iothubesp3-57938526-03c4f4a01c',
+    consumerGroup: 'functionapp', // Saluran baca mandiri untuk Function App
     cardinality: 'many',
     extraOutputs: [cosmosOutput],
     handler: (messages, context) => {
@@ -33,13 +34,12 @@ app.eventHub('jembatan-iot', {
         for (const message of messages) {
             context.log('Data masuk dari ESP32:', message);
             
-            // Mengambil nilai asli dari MQTT ESP32 untuk formatting ID
-            // Jika kosong, diberi fallback "unknown" agar string ID tidak error/undefined
+            // Mengambil nilai asli dari MQTT ESP32
             const rawCoffeeType = message.coffee_type || "unknown";
             const rawStatusCoffee = message.status_coffee || message.status_bean || "unknown";
             const rawBatch = message.batch || "unknown";
 
-            // Formatting khusus untuk ID (huruf kecil & spasi jadi strip)
+            // Formatting ID (huruf kecil & spasi jadi strip)
             const idCoffeeType = rawCoffeeType.toString().toLowerCase().replace(/\s+/g, '-');
             const idStatusCoffee = rawStatusCoffee.toString().toLowerCase().replace(/\s+/g, '-');
             const idBatch = rawBatch.toString().toLowerCase().replace(/\s+/g, '-');
@@ -47,17 +47,16 @@ app.eventHub('jembatan-iot', {
             const wibTimestampIso = getWibIsoString();
             const wibTimestampId = getWibTimestampForId();
             
-            // Format ID CosmosDB
+            // Format ID CosmosDB (Contoh: robusta_green-bean_batch-1_20261019_230000_1234)
             const customId = `${idCoffeeType}_${idStatusCoffee}_${idBatch}_${wibTimestampId}_${Math.random().toString().substring(2, 6)}`;
 
             dataUntukDisimpan.push({
                 id: customId,
-                device_id: message.device_id, // Langsung ditarik dari payload device
+                device_id: message.device_id,
                 timestamp: wibTimestampIso,
                 data: {
-                    // Murni mengambil data sesuai yang dikirim ESP32
                     coffee_type: message.coffee_type,
-                    status_coffee: message.status_coffee || message.status_bean, // Mengubah pembacaan status_bean menjadi key status_coffee
+                    status_coffee: message.status_coffee || message.status_bean,
                     batch: message.batch,
                     confidence_score: message.confidence || message.confidence_score,
                     sensors: {
