@@ -58,6 +58,7 @@ app.eventHub('jembatan-iot', {
                     coffee_type: message.coffee_type,
                     status_coffee: message.status_coffee || message.status_bean,
                     batch: message.batch,
+                    firmware_version: message.firmware_version || "v1.0", // Menangkap parameter versi firmware dari ESP32
                     confidence_score: message.confidence || message.confidence_score,
                     sensors: {
                         temperature: message.temperature || message.sensors?.temperature,

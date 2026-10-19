@@ -6,3 +6,4 @@ app.setup({
 
 // PENTING: Daftarkan file fungsi agar dieksekusi oleh Host Azure Functions
 require('./functions/jembatan-iot');
+require('./functions/trigger-ota'); // Menambahkan pendaftaran fungsi OTA

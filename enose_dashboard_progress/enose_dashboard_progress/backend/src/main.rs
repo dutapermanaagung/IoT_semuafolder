@@ -90,6 +90,7 @@ async fn create_sampling(
         data: SamplingPayload {
             coffee_type,
             device_id: Some(dev_id),
+            firmware_version: input.firmware_version, // Memasukkan parameter versi firmware
             sensors: input.sensors,
         },
     };

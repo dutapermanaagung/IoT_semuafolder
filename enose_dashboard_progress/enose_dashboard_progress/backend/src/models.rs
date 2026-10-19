@@ -22,6 +22,8 @@ pub struct SamplingPayload {
     pub coffee_type: String,
     #[serde(default)]
     pub device_id: Option<String>,
+    #[serde(default)]
+    pub firmware_version: Option<String>, // Ditambahkan untuk menerima versi firmware
     pub sensors: SensorValues,
 }
 
@@ -39,6 +41,8 @@ pub struct CreateSampling {
     pub coffee_type: String,
     #[serde(default)]
     pub device_id: Option<String>,
+    #[serde(default)]
+    pub firmware_version: Option<String>, // Ditambahkan untuk menerima versi firmware
     pub sensors: SensorValues,
 }
 

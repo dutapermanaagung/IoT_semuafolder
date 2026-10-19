@@ -18,6 +18,7 @@ function App() {
   const [backendStatus, setBackendStatus] = useState("Checking...");
   const [dbStatus, setDbStatus] = useState("Checking...");
   const [isOnline, setIsOnline] = useState(false);
+  const [fwVersion, setFwVersion] = useState("v1.0"); // State baru untuk Firmware OTA
   
   // State untuk Pagination Tabel
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,8 +51,16 @@ function App() {
       // Jika batch === "all", hilangkan parameter batch agar backend mengirimkan semua data
       const batchQuery = batch === "all" ? "" : `&batch=${batch}`;
       const rows = await fetch(`${API}/api/sampling?coffee_type=${type}&bean_status=${status}${batchQuery}`).then(r=>r.json());
-      setData(rows.reverse()); // Oldest first untuk keperluan charting
+      const reversedRows = rows.reverse();
+      setData(reversedRows); // Oldest first untuk keperluan charting
       
+      // Ambil versi firmware dari data terbaru (index 0 setelah di-reverse atau dari array asli)
+      if (reversedRows.length > 0) {
+        const latest = reversedRows[reversedRows.length - 1]; // Mengambil data paling baru (ujung array)
+        const currentFw = latest.data?.firmware_version || latest.firmware_version;
+        if (currentFw) setFwVersion(currentFw);
+      }
+
       const s = await fetch(`${API}/api/statistics?coffee_type=${type}&bean_status=${status}${batchQuery}`).then(r=>r.json());
       setStats(s);
     } catch (err) {
@@ -74,6 +83,12 @@ function App() {
       const incomingStatus = item.bean_status || item.data?.bean_status;
       const incomingBatch = item.batch || item.data?.batch;
       
+      // Update Firmware secara Real-time dari WebSocket
+      const incomingFw = item.data?.firmware_version || item.firmware_version;
+      if (incomingFw) {
+         setFwVersion(incomingFw);
+      }
+
       const isTypeMatch = incomingType === type;
       const isStatusMatch = !incomingStatus || incomingStatus === status;
       const isBatchMatch = batch === "all" || !incomingBatch || String(incomingBatch) === String(batch);
@@ -388,6 +403,11 @@ function App() {
         <p>ESP32-S3 → Rust Backend → Azure Cosmos DB → React</p>
       </div>
       <div style={{display: "flex", gap: "10px"}}>
+        {/* INDIKATOR OTA FIRMWARE BARU */}
+        <div className="status-badge" style={{background: "#2980b9", color: "white"}}>
+          <span style={{fontSize: "14px", marginRight: "4px"}}>🔄</span>
+          Firmware: {fwVersion}
+        </div>
         <div className="status-badge">
           <span className={`status-dot ${isOnline ? 'online' : 'offline'}`}></span>
           Backend: {backendStatus}
