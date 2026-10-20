@@ -22,6 +22,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./enose_dashboard_progress/enose_dashboard_progress/backend
+        file: ./enose_dashboard_progress/enose_dashboard_progress/backend/Dockerfile
         push: true
         tags: enoseregistry.azurecr.io/backend-rust:latest
         no-cache: true
