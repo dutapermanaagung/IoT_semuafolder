@@ -89,14 +89,17 @@ async fn create_sampling(
         timestamp: Utc::now(),
         data: SamplingPayload {
             coffee_type,
+            status_coffee: input.status_coffee,
+            batch: input.batch,
             device_id: Some(dev_id),
-            firmware_version: input.firmware_version, // Memasukkan parameter versi firmware
+            firmware_version: input.firmware_version,
+            confidence_score: input.confidence_score,
             sensors: input.sensors,
         },
     };
 
     // --- PEMISAHAN TUGAS (READ ONLY) ---
-    // Kode di bawah ini DIKOMENTAR agar Rust tidak lagi menulis data format lama ke CosmosDB.
+    // Kode di bawah ini DIKOMENTAR agar Rust tidak lagi menulis data ke CosmosDB.
     // Insert data sepenuhnya diambil alih oleh Azure Function App (Node.js).
     //
     // state.repo.insert(&item).await.map_err(internal_error)?;
@@ -127,9 +130,18 @@ async fn statistics(
 
     if count == 0 {
         return Ok(Json(Statistics {
-            coffee_type, count: 0,
-            mq2_avg: 0.0, mq3_avg: 0.0, mq135_avg: 0.0, mq138_avg: 0.0,
-            temperature_avg: 0.0, humidity_avg: 0.0,
+            coffee_type,
+            count: 0,
+            mq3_avg: 0.0,
+            mq6_avg: 0.0,
+            mq7_avg: 0.0,
+            mq135_avg: 0.0,
+            tgs2600_avg: 0.0,
+            tgs2602_avg: 0.0,
+            tgs2611_avg: 0.0,
+            tgs2620_avg: 0.0,
+            temperature_avg: 0.0,
+            humidity_avg: 0.0,
         }));
     }
 
@@ -138,10 +150,14 @@ async fn statistics(
     Ok(Json(Statistics {
         coffee_type,
         count,
-        mq2_avg: avg(|x| x.data.sensors.mq2),
         mq3_avg: avg(|x| x.data.sensors.mq3),
+        mq6_avg: avg(|x| x.data.sensors.mq6),
+        mq7_avg: avg(|x| x.data.sensors.mq7),
         mq135_avg: avg(|x| x.data.sensors.mq135),
-        mq138_avg: avg(|x| x.data.sensors.mq138),
+        tgs2600_avg: avg(|x| x.data.sensors.tgs2600),
+        tgs2602_avg: avg(|x| x.data.sensors.tgs2602),
+        tgs2611_avg: avg(|x| x.data.sensors.tgs2611),
+        tgs2620_avg: avg(|x| x.data.sensors.tgs2620),
         temperature_avg: avg(|x| x.data.sensors.temperature),
         humidity_avg: avg(|x| x.data.sensors.humidity),
     }))
