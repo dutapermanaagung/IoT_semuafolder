@@ -24,3 +24,4 @@ jobs:
         context: ./enose_dashboard_progress/enose_dashboard_progress/backend
         push: true
         tags: enoseregistry.azurecr.io/backend-rust:latest
+        no-cache: true
