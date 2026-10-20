@@ -24,5 +24,7 @@ jobs:
         context: ./enose_dashboard_progress/enose_dashboard_progress/backend
         file: ./enose_dashboard_progress/enose_dashboard_progress/backend/Dockerfile
         push: true
-        tags: enoseregistry.azurecr.io/backend-rust:latest
+        tags: |
+          enoseregistry.azurecr.io/backend-rust:latest
+          enoseregistry.azurecr.io/backend-rust:${{ github.sha }}
         no-cache: true
