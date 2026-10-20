@@ -1,9 +1,6 @@
-# ======================
 # Stage 1: Builder
-# ======================
 FROM rust:bookworm AS builder
 
-# Install dependency yang dibutuhkan untuk compile
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
@@ -12,28 +9,16 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy Cargo.toml & Cargo.lock dulu supaya dependency di-cache
+# Copy manifest & seluruh source code asli
 COPY Cargo.toml Cargo.lock ./
-
-# Buat dummy source supaya cargo bisa resolve dependency
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-
-# Build dependency dulu (layer ini akan di-cache)
-RUN cargo build --release
-
-# Hapus dummy dan copy source code asli
-RUN rm -rf src
 COPY src ./src
 
-# Build ulang dengan source asli
-RUN touch src/main.rs && cargo build --release
+# Build biner release secara bersih dari source asli
+RUN cargo build --release
 
-# ======================
 # Stage 2: Runtime
-# ======================
 FROM debian:bookworm-slim
 
-# Install ca-certificates & libssl-dev/libssl3 untuk koneksi HTTPS Cosmos DB
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
@@ -42,10 +27,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Gunakan nama binary yang benar dari hasil build Cargo
+# Copy biner executable hasil build
 COPY --from=builder /app/target/release/enose-cosmos-backend /app/backend
 
-# Set environment variable bawaan agar Axum mendengar port Ingress
 ENV PORT=8080
 ENV HOST=0.0.0.0
 
