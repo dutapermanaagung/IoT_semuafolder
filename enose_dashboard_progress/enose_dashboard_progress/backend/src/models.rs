@@ -32,12 +32,11 @@ pub struct SamplingPayload {
     pub status_coffee: Option<String>,
     #[serde(default)]
     pub batch: Option<String>,
-    #[serde(default)]
-    pub device_id: Option<String>,
+    // device_id DI SINI SUDAH DIHAPUS
     #[serde(default)]
     pub firmware_version: Option<String>,
     #[serde(default)]
-    pub connected_wifi: Option<String>, // Menangkap info SSID Wi-Fi aktif
+    pub connected_wifi: Option<String>,
     #[serde(default)]
     pub confidence_score: Option<f64>,
     pub sensors: SensorValues,
@@ -47,7 +46,7 @@ pub struct SamplingPayload {
 pub struct Sampling {
     pub id: String,
     #[serde(default)]
-    pub device_id: Option<String>,
+    pub device_id: Option<String>, // device_id tetap berada di root dokumen
     pub timestamp: DateTime<Utc>,
     pub data: SamplingPayload,
 }
@@ -64,7 +63,7 @@ pub struct CreateSampling {
     #[serde(default)]
     pub firmware_version: Option<String>,
     #[serde(default)]
-    pub connected_wifi: Option<String>, // Menangkap info SSID Wi-Fi dari request
+    pub connected_wifi: Option<String>,
     #[serde(default)]
     pub confidence_score: Option<f64>,
     pub sensors: SensorValues,

@@ -100,7 +100,6 @@ async fn upload_firmware(
     }
 
     let storage_account = env::var("STORAGE_ACCOUNT_NAME").unwrap_or_else(|_| "storageesp32ota".into());
-    // Menggunakan `_storage_key` agar tidak menghasilkan compiler warning
     let _storage_key = env::var("STORAGE_ACCOUNT_KEY").map_err(|_| {
         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "STORAGE_ACCOUNT_KEY belum dikonfigurasi".into())
     })?;
@@ -148,13 +147,13 @@ async fn create_sampling(
     let dev_id = input.device_id.clone().unwrap_or_else(|| "esp32s3-device-01".into());
     let item = Sampling {
         id: Uuid::new_v4().to_string(),
-        device_id: Some(dev_id.clone()),
+        device_id: Some(dev_id),
         timestamp: Utc::now(),
         data: SamplingPayload {
             coffee_type,
             status_coffee: input.status_coffee,
             batch: input.batch,
-            device_id: Some(dev_id),
+            // BARIS device_id DI SINI TELAH DIHAPUS
             firmware_version: input.firmware_version,
             connected_wifi: input.connected_wifi,
             confidence_score: input.confidence_score,

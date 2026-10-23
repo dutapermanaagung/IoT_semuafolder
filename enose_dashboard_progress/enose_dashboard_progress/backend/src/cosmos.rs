@@ -32,8 +32,7 @@ impl CosmosRepo {
         let pk = item
             .device_id
             .clone()
-            .or_else(|| item.data.device_id.clone())
-            .unwrap_or_else(|| "esp32s3-device-01".to_string());
+            .unwrap_or_else(|| "esp32s3-device-01".to_string()); // DIUBAH DI SINI
 
         self.container
             .create_item(pk, &item.id, item.clone(), None)
