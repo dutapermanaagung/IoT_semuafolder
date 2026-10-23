@@ -9,6 +9,20 @@ const CONTAINER_URL = "backend-db.bravedesert-90e1dd1a.indonesiacentral.azurecon
 const API = import.meta.env.VITE_API_URL || `https://${CONTAINER_URL}`;
 const WS_URL = import.meta.env.VITE_WS_URL || `wss://${CONTAINER_URL}/ws`;
 
+// Pemetaan Volatile Compounds berdasarkan spesifikasi teknis sensor
+const sensorCompounds = {
+  MQ3: "Benzene, Alcohol, Aldehyde",
+  MQ6: "CO, LPG, Methane",
+  MQ7: "Acetone, Methanol, Alcohol",
+  MQ135: "CO₂, CO, Ammonia",
+  TGS2600: "Ethanol, Hydrogen, Iso-butane",
+  TGS2602: "Ammonia, Toluene, Hydrogen",
+  TGS2611: "Methane, Iso-butane, Hydrogen",
+  TGS2620: "Alcohol, Hydrogen, Ethanol",
+  Temp: "Temperature (°C)",
+  Hum: "Humidity (%)"
+};
+
 function App() {
   const [type, setType] = useState("robusta");
   const [status, setStatus] = useState("Green Bean");
@@ -405,7 +419,8 @@ function App() {
   });
 
   const sensorKeys = ['MQ3', 'MQ6', 'MQ7', 'MQ135', 'TGS2600', 'TGS2602', 'TGS2611', 'TGS2620', 'Temp', 'Hum'];
-  const colors = ['#e67e22', '#2980b9', '#27ae60', '#8e44ad', '#f1c40f', '#e74c3c', '#34495e', '#16a085', '#c0392b', '#3498db'];
+  
+  const colors = ['#e67e22', '#607d8b', '#27ae60', '#8e44ad', '#f1c40f', '#e91e63', '#34495e', '#16a085', '#c0392b', '#3498db'];
 
   const latestItem = data[data.length - 1] || {};
   const latestConf = latestItem?.data?.confidence_score ?? latestItem?.confidence_score ?? latestItem?.data?.sensors?.confidence_score;
@@ -552,8 +567,13 @@ function App() {
       <h2>Individual Sensor Trends (8 Gas + 2 Env)</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginTop: '15px' }}>
         {sensorKeys.map((sensor, idx) => (
-          <div key={sensor} style={{ border: '1px solid #e0e6ed', padding: '10px', borderRadius: '8px', background: '#fafbfc' }}>
-            <h4 style={{ margin: '0 0 10px 0', textAlign: 'center', color: '#2c3e50', fontSize: '13px' }}>{sensor}</h4>
+          <div key={sensor} style={{ border: '1px solid #e0e6ed', padding: '10px', borderRadius: '8px', background: '#fafbfc', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <h4 style={{ margin: '0', textAlign: 'center', color: '#2c3e50', fontSize: '13px', fontWeight: 'bold' }}>{sensor}</h4>
+              <p style={{ margin: '3px 0 8px 0', textAlign: 'center', color: '#7f8c8d', fontSize: '10px', minHeight: '22px', lineHeight: '1.2' }}>
+                {sensorCompounds[sensor]}
+              </p>
+            </div>
             <ResponsiveContainer width="100%" height={120}>
               <LineChart data={chartData}>
                 <XAxis dataKey="n" hide />

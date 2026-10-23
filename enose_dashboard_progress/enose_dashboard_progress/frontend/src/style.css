@@ -1,146 +1,53 @@
+* {
+  box-sizing: border-box;
+}
+
+/* Background Asli 100% Jernih & Asri */
 body {
   margin: 0;
+  padding: 0;
   font-family: Arial, sans-serif;
-  background: #f4f6f8;
   color: #17202a;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: url('/coffee-bg.jpeg') no-repeat center center fixed;
+  background-size: cover;
 }
 
 main {
-  max-width: 1200px;
-  margin: auto;
-  padding: 28px;
+  width: 95%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 20px 12px;
 }
 
-h1 {
-  margin-bottom: 4px;
-  color: #2c3e50;
-}
-
-.toolbar {
-  display: flex;
-  gap: 10px;
-  margin: 24px 0;
-}
-
-.toolbar select, .toolbar button {
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid #bdc3c7;
-  background: white;
-  font-weight: 600;
-}
-
-.toolbar button {
-  background: #d35400;
-  color: white;
-  border: none;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.export-pdf {
-  background: #d35400 !important;
-}
-
-.export-pdf:hover {
-  background: #ba4a00 !important;
-}
-
-.export-csv {
-  background: #27ae60 !important;
-}
-
-.export-csv:hover {
-  background: #219150 !important;
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border-left: 5px solid #d35400; /* Aksen warna di sisi kiri kartu */
-}
-
-.card small {
-  display: block;
-  color: #7f8c8d;
-  font-weight: bold;
-  text-transform: uppercase;
-  font-size: 11px;
-}
-
-.card strong {
-  display: block;
-  font-size: 24px;
-  margin-top: 8px;
-  color: #2c3e50;
-}
-
-.panel {
-  background: white;
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  margin-top: 18px;
-}
-
-.panel h2 {
-  color: #2c3e50;
-  font-size: 18px;
-  margin-top: 0;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-/* Membuat Header Tabel Berwarna seperti contoh dashboard */
-th {
-  background: #d35400; 
-  color: white;
-  padding: 10px 12px;
-  text-align: left;
-  font-weight: 600;
-}
-
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f1f2f6;
-  text-align: left;
-}
-
-tr:nth-child(even) {
-  background-color: #fafbfc; /* Efek baris selang-seling berwarna tipis */
-}
-
-@media(max-width: 800px) {
-  .cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  main {
-    padding: 15px;
-  }
-  .panel {
-    overflow: auto;
-  }
-}
-
-/* Header Layout dengan Status Koneksi */
+/* Header Container (Solid & Ringkas) */
 .header-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 16px 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  margin-bottom: 18px;
+  border-left: 5px solid #d35400;
+}
+
+h1 {
+  margin: 0 0 4px 0;
+  color: #2c3e50;
+  font-size: clamp(22px, 3.5vw, 30px);
+  font-weight: bold;
+}
+
+.header-container p {
+  margin: 0;
+  color: #5d6d7e;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .status-badge {
@@ -151,7 +58,7 @@ tr:nth-child(even) {
   border-radius: 20px;
   font-size: 12px;
   font-weight: bold;
-  background: #eaecee;
+  background: #f0f3f4;
   color: #2c3e50;
 }
 
@@ -172,6 +79,78 @@ tr:nth-child(even) {
   box-shadow: 0 0 8px rgba(192, 57, 43, 0.6);
 }
 
+/* Control Toolbar */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.toolbar select, .toolbar button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #bdc3c7;
+  background: rgba(255, 255, 255, 0.97);
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.toolbar button {
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.export-pdf {
+  background: #d35400 !important;
+}
+
+.export-pdf:hover {
+  background: #ba4a00 !important;
+}
+
+.export-csv {
+  background: #27ae60 !important;
+}
+
+.export-csv:hover {
+  background: #219150 !important;
+}
+
+/* Grid Kartu Metrics */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  border-left: 5px solid #d35400;
+}
+
+.card small {
+  display: block;
+  color: #7f8c8d;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.card strong {
+  display: block;
+  font-size: 24px;
+  margin-top: 8px;
+  color: #2c3e50;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -180,4 +159,76 @@ tr:nth-child(even) {
 
 .card-icon {
   font-size: 20px;
+}
+
+/* Panel Grafik & Tabel Data */
+.panel {
+  background: rgba(255, 255, 255, 0.97);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.15);
+  margin-top: 18px;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.panel h2 {
+  color: #2c3e50;
+  font-size: 18px;
+  margin-top: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+th {
+  background: #d35400; 
+  color: white;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+}
+
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f2f6;
+  text-align: left;
+}
+
+tr:nth-child(even) {
+  background-color: #fafbfc;
+}
+
+/* Penyesuaian Responsif HP */
+@media (max-width: 600px) {
+  main {
+    width: 100%;
+    padding: 10px 8px;
+  }
+
+  .toolbar select, .toolbar button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .card strong {
+    font-size: 20px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
 }
