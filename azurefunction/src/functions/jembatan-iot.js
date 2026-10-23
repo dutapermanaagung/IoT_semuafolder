@@ -49,14 +49,14 @@ app.eventHub('jembatan-iot', {
 
             dataUntukDisimpan.push({
                 id: customId,
-                device_id: message.device_id,
+                device_id: message.device_id || "esp32s3-device-01", // Cukup di root aja
                 timestamp: wibTimestampIso,
                 data: {
                     coffee_type: message.coffee_type,
                     status_coffee: message.status_coffee || message.status_bean,
                     batch: message.batch,
                     firmware_version: message.firmware_version || "v1.0",
-                    connected_wifi: message.connected_wifi || message.wifi_ssid || "Unknown_WiFi", // Menangkap info Wi-Fi aktif dari ESP32
+                    connected_wifi: message.connected_wifi || message.wifi_ssid || "Unknown_WiFi",
                     confidence_score: message.confidence ?? message.confidence_score ?? null,
                     sensors: {
                         temperature: message.temperature ?? message.sensors?.temperature ?? 0,
