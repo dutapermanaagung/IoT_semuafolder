@@ -7,6 +7,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use base64::{engine::general_purpose, Engine as _};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use chrono::Utc;
 use cosmos::CosmosRepo;
 use models::{CreateSampling, Sampling, SamplingPayload, Statistics};
@@ -15,6 +18,8 @@ use std::{env, net::SocketAddr, sync::Arc};
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Clone)]
 struct AppState {
@@ -74,6 +79,31 @@ async fn health() -> Json<serde_json::Value> {
     }))
 }
 
+// Fungsi pembantu pembuat SharedKey Authorization untuk Azure Blob Storage
+fn generate_azure_shared_key_auth(
+    account: &str,
+    key_base64: &str,
+    content_length: usize,
+    blob_name: &str,
+    date_str: &str,
+) -> Result<String, String> {
+    let key_bytes = general_purpose::STANDARD
+        .decode(key_base64)
+        .map_err(|e| format!("Gagal decode STORAGE_ACCOUNT_KEY Base64: {}", e))?;
+
+    let string_to_sign = format!(
+        "PUT\n\n\n{}\n\n\n\n\n\n\n\n\nx-ms-blob-type:BlockBlob\nx-ms-date:{}\nx-ms-version:2020-10-02\n/{}/firmware/{}",
+        content_length, date_str, account, blob_name
+    );
+
+    let mut mac = HmacSha256::new_from_slice(&key_bytes)
+        .map_err(|e| format!("Gagal inisialisasi HMAC SHA256: {}", e))?;
+    mac.update(string_to_sign.as_bytes());
+    let signature = general_purpose::STANDARD.encode(mac.finalize().into_bytes());
+
+    Ok(format!("SharedKey {}:{}", account, signature))
+}
+
 async fn upload_firmware(
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
@@ -112,12 +142,12 @@ async fn upload_firmware(
     }
 
     let storage_account = env::var("STORAGE_ACCOUNT_NAME").unwrap_or_else(|_| "storageesp32ota".into());
-    let _storage_key = env::var("STORAGE_ACCOUNT_KEY").map_err(|_| {
+    let storage_key = env::var("STORAGE_ACCOUNT_KEY").map_err(|_| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({
                 "status": "error",
-                "message": "STORAGE_ACCOUNT_KEY belum dikonfigurasi di Environment Variables"
+                "message": "STORAGE_ACCOUNT_KEY belum dikonfigurasi di Environment Variables Container Apps"
             })),
         )
     })?;
@@ -130,11 +160,32 @@ async fn upload_firmware(
     let client = reqwest::Client::new();
     let now = Utc::now().format("%a, %d %b %Y %H:%M:%S GMT").to_string();
 
+    let auth_header = match generate_azure_shared_key_auth(
+        &storage_account,
+        &storage_key,
+        file_bytes.len(),
+        &file_name,
+        &now,
+    ) {
+        Ok(auth) => auth,
+        Err(e) => {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "message": e
+                })),
+            ));
+        }
+    };
+
     let res = client
         .put(&blob_url)
+        .header("Authorization", auth_header)
         .header("x-ms-blob-type", "BlockBlob")
         .header("x-ms-date", &now)
         .header("x-ms-version", "2020-10-02")
+        .header("Content-Length", file_bytes.len())
         .body(file_bytes)
         .send()
         .await

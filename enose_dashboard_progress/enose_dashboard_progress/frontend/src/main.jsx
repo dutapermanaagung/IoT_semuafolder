@@ -132,7 +132,7 @@ function App() {
     setCurrentPage(1);
   };
 
-  // Handler Upload File Firmware .bin
+  // Handler Upload File Firmware .bin yang Aman dari Parsing Error
   async function handleFirmwareUpload(e) {
     e.preventDefault();
     if (!selectedFile) {
@@ -157,7 +157,16 @@ function App() {
         body: formData,
       });
 
-      const result = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let result;
+
+      if (contentType.includes("application/json")) {
+        result = await res.json();
+      } else {
+        const textError = await res.text();
+        result = { message: textError || `HTTP Error ${res.status}` };
+      }
+
       if (res.ok) {
         setUploadStatusMsg("✅ Upload sukses! Pemicu OTA terkirim ke ESP32-S3.");
         setTimeout(() => {
