@@ -76,7 +76,7 @@ async fn health() -> Json<serde_json::Value> {
 
 async fn upload_firmware(
     mut multipart: Multipart,
-) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, Json<serde_json::Value>)> {
     let mut file_name = String::new();
     let mut file_bytes = Vec::new();
 
@@ -92,16 +92,34 @@ async fn upload_firmware(
     }
 
     if file_name.is_empty() || file_bytes.is_empty() {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "File .bin tidak ditemukan dalam request".into()));
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "File .bin tidak ditemukan dalam request"
+            })),
+        ));
     }
 
     if !file_name.ends_with(".bin") {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "File harus berekstensi .bin".into()));
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "File harus berekstensi .bin"
+            })),
+        ));
     }
 
     let storage_account = env::var("STORAGE_ACCOUNT_NAME").unwrap_or_else(|_| "storageesp32ota".into());
     let _storage_key = env::var("STORAGE_ACCOUNT_KEY").map_err(|_| {
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "STORAGE_ACCOUNT_KEY belum dikonfigurasi".into())
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "STORAGE_ACCOUNT_KEY belum dikonfigurasi di Environment Variables"
+            })),
+        )
     })?;
 
     let blob_url = format!(
@@ -115,12 +133,18 @@ async fn upload_firmware(
     let res = client
         .put(&blob_url)
         .header("x-ms-blob-type", "BlockBlob")
-        .header("x-ms-date", now)
+        .header("x-ms-date", &now)
         .header("x-ms-version", "2020-10-02")
         .body(file_bytes)
         .send()
         .await
-        .map_err(internal_error)?;
+        .map_err(|e| (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": format!("Gagal terhubung ke Azure Blob: {}", e)
+            })),
+        ))?;
 
     if res.status().is_success() {
         Ok(Json(serde_json::json!({
@@ -131,7 +155,13 @@ async fn upload_firmware(
         })))
     } else {
         let err_text = res.text().await.unwrap_or_default();
-        Err((axum::http::StatusCode::BAD_GATEWAY, format!("Gagal unggah ke Azure Blob: {err_text}")))
+        Err((
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": format!("Gagal unggah ke Azure Blob: {}", err_text)
+            })),
+        ))
     }
 }
 
@@ -153,7 +183,6 @@ async fn create_sampling(
             coffee_type,
             status_coffee: input.status_coffee,
             batch: input.batch,
-            // BARIS device_id DI SINI TELAH DIHAPUS
             firmware_version: input.firmware_version,
             connected_wifi: input.connected_wifi,
             confidence_score: input.confidence_score,
