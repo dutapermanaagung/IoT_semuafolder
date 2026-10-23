@@ -56,6 +56,7 @@ app.eventHub('jembatan-iot', {
                     status_coffee: message.status_coffee || message.status_bean,
                     batch: message.batch,
                     firmware_version: message.firmware_version || "v1.0",
+                    connected_wifi: message.connected_wifi || message.wifi_ssid || "Unknown_WiFi", // Menangkap info Wi-Fi aktif dari ESP32
                     confidence_score: message.confidence ?? message.confidence_score ?? null,
                     sensors: {
                         temperature: message.temperature ?? message.sensors?.temperature ?? 0,
