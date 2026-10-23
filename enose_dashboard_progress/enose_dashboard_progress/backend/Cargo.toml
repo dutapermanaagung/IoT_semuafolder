@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 azure_data_cosmos = { version = "0.38", features = ["key_auth"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
@@ -19,3 +19,4 @@ uuid = { version = "1", features = ["v4"] }
 anyhow = "1"
 futures-util = "0.3.34"
 azure_core = "1.1.0"
+reqwest = "0.13.5"

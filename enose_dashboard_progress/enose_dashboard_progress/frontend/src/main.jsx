@@ -12,19 +12,23 @@ const WS_URL = import.meta.env.VITE_WS_URL || `wss://${CONTAINER_URL}/ws`;
 function App() {
   const [type, setType] = useState("robusta");
   const [status, setStatus] = useState("Green Bean");
-  const [batch, setBatch] = useState("1"); // State untuk Batch 1-10 atau "all"
+  const [batch, setBatch] = useState("1");
   const [data, setData] = useState([]);
   const [stats, setStats] = useState(null);
   const [backendStatus, setBackendStatus] = useState("Checking...");
   const [dbStatus, setDbStatus] = useState("Checking...");
   const [isOnline, setIsOnline] = useState(false);
-  const [fwVersion, setFwVersion] = useState("v1.0"); // State baru untuk Firmware OTA
+  const [fwVersion, setFwVersion] = useState("v1.0");
   
-  // State untuk Pagination Tabel
+  // State untuk Modal Upload Firmware OTA
+  const [showModal, setShowModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatusMsg, setUploadStatusMsg] = useState("");
+
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
 
-  // Fungsi untuk mengecek kesehatan backend & koneksi Cosmos DB
   async function checkHealth() {
     try {
       const res = await fetch(`${API}/api/health`, { signal: AbortSignal.timeout(3000) });
@@ -45,18 +49,15 @@ function App() {
     }
   }
 
-  // Load data berdasarkan jenis kopi, status bean, DAN batch
   async function load() {
     try {
-      // Jika batch === "all", hilangkan parameter batch agar backend mengirimkan semua data
       const batchQuery = batch === "all" ? "" : `&batch=${batch}`;
       const rows = await fetch(`${API}/api/sampling?coffee_type=${type}&bean_status=${status}${batchQuery}`).then(r=>r.json());
       const reversedRows = rows.reverse();
-      setData(reversedRows); // Oldest first untuk keperluan charting
+      setData(reversedRows);
       
-      // Ambil versi firmware dari data terbaru (index 0 setelah di-reverse atau dari array asli)
       if (reversedRows.length > 0) {
-        const latest = reversedRows[reversedRows.length - 1]; // Mengambil data paling baru (ujung array)
+        const latest = reversedRows[reversedRows.length - 1];
         const currentFw = latest.data?.firmware_version || latest.firmware_version;
         if (currentFw) setFwVersion(currentFw);
       }
@@ -83,7 +84,6 @@ function App() {
       const incomingStatus = item.bean_status || item.data?.bean_status;
       const incomingBatch = item.batch || item.data?.batch;
       
-      // Update Firmware secara Real-time dari WebSocket
       const incomingFw = item.data?.firmware_version || item.firmware_version;
       if (incomingFw) {
          setFwVersion(incomingFw);
@@ -93,9 +93,8 @@ function App() {
       const isStatusMatch = !incomingStatus || incomingStatus === status;
       const isBatchMatch = batch === "all" || !incomingBatch || String(incomingBatch) === String(batch);
 
-      // Filter realtime data
       if (isTypeMatch && isStatusMatch && isBatchMatch) {
-        const limit = batch === "all" ? -2000 : -100; // Jika 'all', perbesar batas array agar grafik total tidak terpotong
+        const limit = batch === "all" ? -2000 : -100;
         setData(prev => [...prev, item].slice(limit));
       }
     };
@@ -104,7 +103,6 @@ function App() {
     return () => ws.close();
   }, [type, status, batch]);
 
-  // Reset pagination ke halaman 1 setiap ganti filter
   const handleTypeChange = (e) => {
     setType(e.target.value);
     setCurrentPage(1);
@@ -120,7 +118,49 @@ function App() {
     setCurrentPage(1);
   };
 
-  // Transformasi data aktual Cosmos DB untuk Ekspor (PDF & CSV)
+  // Handler Upload File Firmware .bin
+  async function handleFirmwareUpload(e) {
+    e.preventDefault();
+    if (!selectedFile) {
+      alert("Pilih file .bin terlebih dahulu!");
+      return;
+    }
+
+    if (!selectedFile.name.endsWith(".bin")) {
+      alert("File harus berformat .bin!");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadStatusMsg("Mengunggah firmware ke Azure Storage...");
+
+    const formData = new FormData();
+    formData.append("firmware", selectedFile);
+
+    try {
+      const res = await fetch(`${API}/api/firmware`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        setUploadStatusMsg("✅ Upload sukses! Pemicu OTA terkirim ke ESP32-S3.");
+        setTimeout(() => {
+          setShowModal(false);
+          setSelectedFile(null);
+          setUploadStatusMsg("");
+        }, 2000);
+      } else {
+        setUploadStatusMsg(`❌ Error: ${result.message || "Gagal mengunggah"}`);
+      }
+    } catch (err) {
+      setUploadStatusMsg(`❌ Gagal terhubung ke server: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   const getActualExportData = () => {
     return data.map((item, index) => {
       const confScore = item.data?.confidence_score ?? item.confidence_score ?? item.data?.sensors?.confidence_score;
@@ -271,23 +311,9 @@ function App() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Validation Data");
 
     worksheet["!cols"] = [
-      { wch: 5 },  // No
-      { wch: 12 }, // Time
-      { wch: 8 },  // Temp
-      { wch: 8 },  // Hum
-      { wch: 8 },  // MQ3
-      { wch: 8 },  // MQ6
-      { wch: 8 },  // MQ7
-      { wch: 8 },  // MQ135
-      { wch: 10 }, // TGS2600
-      { wch: 10 }, // TGS2602
-      { wch: 10 }, // TGS2611
-      { wch: 10 }, // TGS2620
-      { wch: 15 }, // Classification
-      { wch: 15 }, // Status
-      { wch: 10 }, // Batch
-      { wch: 18 }, // Confidence
-      { wch: 28 }  // Status Accuration
+      { wch: 5 }, { wch: 12 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, 
+      { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, 
+      { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 18 }, { wch: 28 }
     ];
     worksheet["!rows"] = [{ hpt: 25 }];
 
@@ -328,7 +354,7 @@ function App() {
           }
         };
 
-        if (col === 16 && row > 0) { // Index P=15, Q=16 untuk Status Accuration
+        if (col === 16 && row > 0) {
           const acc_status = worksheet[cellAddress].v;
           if (acc_status === "Accurate") {
             worksheet[cellAddress].s = {
@@ -389,8 +415,7 @@ function App() {
     ? `${latestConf}%` 
     : <span style={{fontSize: '13px', lineHeight: '1.2', display: 'block', color: '#7f8c8d'}}>Not yet trained<br/>in edge impulse</span>;
 
-  // ==== LOGIKA PAGINATION TABEL ====
-  const reversedTableData = data.slice().reverse(); // Data terbaru di atas
+  const reversedTableData = data.slice().reverse();
   const totalPages = Math.ceil(reversedTableData.length / ITEMS_PER_PAGE);
   const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
   const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
@@ -402,8 +427,25 @@ function App() {
         <h1>E-Nose Coffee Dashboard</h1>
         <p>ESP32-S3 → Rust Backend → Azure Cosmos DB → React</p>
       </div>
-      <div style={{display: "flex", gap: "10px"}}>
-        {/* INDIKATOR OTA FIRMWARE BARU */}
+      <div style={{display: "flex", gap: "10px", alignItems: "center"}}>
+        <button 
+          onClick={() => setShowModal(true)}
+          style={{
+            background: "#8e44ad", 
+            color: "white", 
+            border: "none", 
+            padding: "8px 14px", 
+            borderRadius: "6px", 
+            cursor: "pointer", 
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px"
+          }}
+        >
+          📤 Upload OTA
+        </button>
+
         <div className="status-badge" style={{background: "#2980b9", color: "white"}}>
           <span style={{fontSize: "14px", marginRight: "4px"}}>🔄</span>
           Firmware: {fwVersion}
@@ -419,28 +461,76 @@ function App() {
       </div>
     </div>
 
+    {/* MODAL DIALOG UPLOAD FIRMWARE */}
+    {showModal && (
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.5)", display: "flex",
+        justifyContent: "center", alignItems: "center", zIndex: 1000
+      }}>
+        <div style={{
+          background: "white", padding: "25px", borderRadius: "10px",
+          width: "400px", boxShadow: "0 4px 15px rgba(0,0,0,0.2)"
+        }}>
+          <h3 style={{marginTop: 0, color: "#2c3e50"}}>Upload Firmware OTA (.bin)</h3>
+          <p style={{fontSize: "13px", color: "#7f8c8d"}}>
+            Pilih file binary baru hasil build dari Edge Impulse / PlatformIO.
+          </p>
+
+          <form onSubmit={handleFirmwareUpload}>
+            <input 
+              type="file" 
+              accept=".bin" 
+              onChange={e => setSelectedFile(e.target.files[0])}
+              style={{marginBottom: "15px", width: "100%"}}
+            />
+
+            {uploadStatusMsg && (
+              <p style={{fontSize: "12px", fontWeight: "bold", color: uploadStatusMsg.startsWith("❌") ? "#c0392b" : "#27ae60"}}>
+                {uploadStatusMsg}
+              </p>
+            )}
+
+            <div style={{display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px"}}>
+              <button 
+                type="button" 
+                onClick={() => { setShowModal(false); setUploadStatusMsg(""); }}
+                disabled={isUploading}
+                style={{padding: "8px 15px", background: "#bdc3c7", border: "none", borderRadius: "5px", cursor: "pointer"}}
+              >
+                Batal
+              </button>
+              <button 
+                type="submit" 
+                disabled={isUploading}
+                style={{padding: "8px 15px", background: "#2980b9", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold"}}
+              >
+                {isUploading ? "Mengunggah..." : "Unggah & Trigger OTA"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
     <div className="toolbar">
-      {/* Dropdown 1: Jenis Kopi */}
       <select value={type} onChange={handleTypeChange}>
         <option value="robusta">Robusta</option>
         <option value="arabika">Arabika</option>
         <option value="excelsa">Excelsa</option>
       </select>
 
-      {/* Dropdown 2: Status Bean */}
       <select value={status} onChange={handleStatusChange}>
         <option value="Green Bean">Green Bean</option>
         <option value="Roasted">Roasted</option>
       </select>
 
-      {/* Dropdown 3: Batch Sampling */}
       <select value={batch} onChange={handleBatchChange}>
         {[...Array(10)].map((_, i) => (
           <option key={i + 1} value={i + 1}>
             Batch {i + 1}
           </option>
         ))}
-        {/* Opsi Total Batch Ditambahkan Di Sini */}
         <option value="all">Total Batch</option>
       </select>
 
@@ -552,7 +642,6 @@ function App() {
         </table>
       </div>
 
-      {/* Kontrol Pagination */}
       {totalPages > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '20px' }}>
           <button 

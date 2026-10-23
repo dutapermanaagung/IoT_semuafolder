@@ -2,7 +2,7 @@ mod cosmos;
 mod models;
 
 use axum::{
-    extract::{Query, State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{Multipart, Query, State, WebSocketUpgrade, ws::{Message, WebSocket}},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let database = env::var("COSMOS_DATABASE").unwrap_or_else(|_| "IoTDatabase".into());
     let container = env::var("COSMOS_CONTAINER").unwrap_or_else(|_| "TelemetryData".into());
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
-    let port: u16 = env::var("PORT").unwrap_or_else(|_| "8080".into()).parse()?;
+    let port: u16 = env::var("PORT").unwrap_or_else(|_| "8081".into()).parse()?;
     
     let repo_result = CosmosRepo::new(endpoint, key, database, container).await;
     match &repo_result {
@@ -53,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/health", get(health))
         .route("/api/sampling", post(create_sampling).get(get_sampling))
         .route("/api/statistics", get(statistics))
+        .route("/api/firmware", post(upload_firmware))
         .route("/ws", get(websocket))
         .with_state(state)
         .layer(CorsLayer::very_permissive());
@@ -71,6 +72,68 @@ async fn health() -> Json<serde_json::Value> {
         "container": "TelemetryData",
         "db": "Connected"
     }))
+}
+
+async fn upload_firmware(
+    mut multipart: Multipart,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+    let mut file_name = String::new();
+    let mut file_bytes = Vec::new();
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        if field.name() == Some("firmware") || field.name() == Some("file") {
+            if let Some(name) = field.file_name() {
+                file_name = name.to_string();
+            }
+            if let Ok(data) = field.bytes().await {
+                file_bytes = data.to_vec();
+            }
+        }
+    }
+
+    if file_name.is_empty() || file_bytes.is_empty() {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "File .bin tidak ditemukan dalam request".into()));
+    }
+
+    if !file_name.ends_with(".bin") {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "File harus berekstensi .bin".into()));
+    }
+
+    let storage_account = env::var("STORAGE_ACCOUNT_NAME").unwrap_or_else(|_| "storageesp32ota".into());
+    // Menggunakan `_storage_key` agar tidak menghasilkan compiler warning
+    let _storage_key = env::var("STORAGE_ACCOUNT_KEY").map_err(|_| {
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "STORAGE_ACCOUNT_KEY belum dikonfigurasi".into())
+    })?;
+
+    let blob_url = format!(
+        "https://{}.blob.core.windows.net/firmware/{}",
+        storage_account, file_name
+    );
+
+    let client = reqwest::Client::new();
+    let now = Utc::now().format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+
+    let res = client
+        .put(&blob_url)
+        .header("x-ms-blob-type", "BlockBlob")
+        .header("x-ms-date", now)
+        .header("x-ms-version", "2020-10-02")
+        .body(file_bytes)
+        .send()
+        .await
+        .map_err(internal_error)?;
+
+    if res.status().is_success() {
+        Ok(Json(serde_json::json!({
+            "status": "success",
+            "message": "Firmware berhasil diunggah ke Azure Storage. Pemicu OTA diaktifkan.",
+            "file_name": file_name,
+            "url": blob_url
+        })))
+    } else {
+        let err_text = res.text().await.unwrap_or_default();
+        Err((axum::http::StatusCode::BAD_GATEWAY, format!("Gagal unggah ke Azure Blob: {err_text}")))
+    }
 }
 
 async fn create_sampling(
@@ -93,17 +156,11 @@ async fn create_sampling(
             batch: input.batch,
             device_id: Some(dev_id),
             firmware_version: input.firmware_version,
+            connected_wifi: input.connected_wifi,
             confidence_score: input.confidence_score,
             sensors: input.sensors,
         },
     };
-
-    // --- PEMISAHAN TUGAS (READ ONLY) ---
-    // Kode di bawah ini DIKOMENTAR agar Rust tidak lagi menulis data ke CosmosDB.
-    // Insert data sepenuhnya diambil alih oleh Azure Function App (Node.js).
-    //
-    // state.repo.insert(&item).await.map_err(internal_error)?;
-    // -----------------------------------
 
     let msg = serde_json::to_string(&item).map_err(internal_error)?;
     let _ = state.tx.send(msg);

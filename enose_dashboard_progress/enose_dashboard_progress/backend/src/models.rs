@@ -37,6 +37,8 @@ pub struct SamplingPayload {
     #[serde(default)]
     pub firmware_version: Option<String>,
     #[serde(default)]
+    pub connected_wifi: Option<String>, // Menangkap info SSID Wi-Fi aktif
+    #[serde(default)]
     pub confidence_score: Option<f64>,
     pub sensors: SensorValues,
 }
@@ -61,6 +63,8 @@ pub struct CreateSampling {
     pub device_id: Option<String>,
     #[serde(default)]
     pub firmware_version: Option<String>,
+    #[serde(default)]
+    pub connected_wifi: Option<String>, // Menangkap info SSID Wi-Fi dari request
     #[serde(default)]
     pub confidence_score: Option<f64>,
     pub sensors: SensorValues,

@@ -27,6 +27,7 @@ impl CosmosRepo {
         Ok(Self { container: container_client })
     }
 
+    #[allow(dead_code)]
     pub async fn insert(&self, item: &Sampling) -> anyhow::Result<()> {
         let pk = item
             .device_id
