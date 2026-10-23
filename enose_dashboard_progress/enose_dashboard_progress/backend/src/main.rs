@@ -87,13 +87,17 @@ fn generate_azure_shared_key_auth(
     blob_name: &str,
     date_str: &str,
 ) -> Result<String, String> {
+    let clean_key = key_base64.trim();
+    let clean_account = account.trim();
+    let clean_blob = blob_name.trim();
+
     let key_bytes = general_purpose::STANDARD
-        .decode(key_base64)
-        .map_err(|e| format!("Gagal decode STORAGE_ACCOUNT_KEY Base64: {}", e))?;
+        .decode(clean_key)
+        .map_err(|e| format!("Gagal decode Base64 STORAGE_ACCOUNT_KEY: {}", e))?;
 
     let string_to_sign = format!(
         "PUT\n\n\n{}\n\n\n\n\n\n\n\n\nx-ms-blob-type:BlockBlob\nx-ms-date:{}\nx-ms-version:2020-10-02\n/{}/firmware/{}",
-        content_length, date_str, account, blob_name
+        content_length, date_str, clean_account, clean_blob
     );
 
     let mut mac = HmacSha256::new_from_slice(&key_bytes)
@@ -101,7 +105,7 @@ fn generate_azure_shared_key_auth(
     mac.update(string_to_sign.as_bytes());
     let signature = general_purpose::STANDARD.encode(mac.finalize().into_bytes());
 
-    Ok(format!("SharedKey {}:{}", account, signature))
+    Ok(format!("SharedKey {}:{}", clean_account, signature))
 }
 
 async fn upload_firmware(
@@ -141,20 +145,37 @@ async fn upload_firmware(
         ));
     }
 
-    let storage_account = env::var("STORAGE_ACCOUNT_NAME").unwrap_or_else(|_| "storageesp32ota".into());
-    let storage_key = env::var("STORAGE_ACCOUNT_KEY").map_err(|_| {
-        (
+    // Ekstraksi kredensial dari Environment Variables / Connection String Fallback
+    let mut storage_account = env::var("STORAGE_ACCOUNT_NAME").unwrap_or_else(|_| "storageesp32ota".into());
+    let mut storage_key = env::var("STORAGE_ACCOUNT_KEY").unwrap_or_default();
+
+    // Jika STORAGE_ACCOUNT_KEY belum diset langsung, ekstrak dari AZURE_STORAGE_CONNECTION_STRING
+    if storage_key.is_empty() {
+        if let Ok(conn_str) = env::var("AZURE_STORAGE_CONNECTION_STRING") {
+            for part in conn_str.split(';') {
+                let part = part.trim();
+                if part.starts_with("AccountName=") {
+                    storage_account = part.replace("AccountName=", "");
+                } else if part.starts_with("AccountKey=") {
+                    storage_key = part.replace("AccountKey=", "");
+                }
+            }
+        }
+    }
+
+    if storage_key.is_empty() {
+        return Err((
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({
                 "status": "error",
-                "message": "STORAGE_ACCOUNT_KEY belum dikonfigurasi di Environment Variables Container Apps"
+                "message": "STORAGE_ACCOUNT_KEY atau AZURE_STORAGE_CONNECTION_STRING belum dikonfigurasi di Environment Variables Container Apps"
             })),
-        )
-    })?;
+        ));
+    }
 
     let blob_url = format!(
         "https://{}.blob.core.windows.net/firmware/{}",
-        storage_account, file_name
+        storage_account.trim(), file_name.trim()
     );
 
     let client = reqwest::Client::new();
@@ -185,7 +206,7 @@ async fn upload_firmware(
         .header("x-ms-blob-type", "BlockBlob")
         .header("x-ms-date", &now)
         .header("x-ms-version", "2020-10-02")
-        .header("Content-Length", file_bytes.len())
+        .header("Content-Length", file_bytes.len().to_string())
         .body(file_bytes)
         .send()
         .await
